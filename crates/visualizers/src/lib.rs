@@ -275,16 +275,37 @@ pub fn render_stage_visualizer(
     }
 }
 
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "TV static clamps normalized brightness before converting to an RGB byte cap"
+)]
 fn tv_static_frame(input: VisualizerInput) -> Vec<Rgb> {
+    let seed = phase_offset(input.beat_progress) as u32;
+    let brightness = (input.volume.clamp(0.05, 1.0) * 255.0).round() as u8;
     preview_frame(|index| {
-        if index % 3 == 0 {
-            input.secondary.scale(0.35)
-        } else if index % 5 == 0 {
-            input.accent.scale(0.25)
-        } else {
-            Rgb::from_u24(0x18_18_18)
+        let index = index as u32;
+        Rgb {
+            r: static_channel(index, 0, seed, brightness),
+            g: static_channel(index, 1, seed, brightness),
+            b: static_channel(index, 2, seed, brightness),
         }
     })
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "Pseudo-random generator intentionally takes the high byte after mixing"
+)]
+fn static_channel(index: u32, channel: u32, seed: u32, brightness: u8) -> u8 {
+    let mut value = index
+        .wrapping_mul(1_664_525)
+        .wrapping_add(channel.wrapping_mul(1_013_904_223))
+        .wrapping_add(seed.wrapping_mul(22_695_477))
+        .wrapping_add(1_013_904_223);
+    value ^= value >> 16;
+    value = value.wrapping_mul(2_246_822_519);
+    ((value >> 24) as u8) % brightness.saturating_add(1)
 }
 
 fn dome_on_off_frame(state: u8, color: Rgb) -> Vec<Rgb> {
@@ -778,6 +799,35 @@ mod tests {
                 .count()
                 > 3_000
         );
+    }
+
+    #[test]
+    fn tv_static_uses_deterministic_varied_noise() {
+        let input = VisualizerInput {
+            volume: 0.5,
+            beat_progress: 0.1,
+            ..VisualizerInput::default()
+        };
+        let first = render_dome_visualizer(LiveVisualizer::TvStatic, input);
+        let second = render_dome_visualizer(LiveVisualizer::TvStatic, input);
+        let changed = render_dome_visualizer(
+            LiveVisualizer::TvStatic,
+            VisualizerInput {
+                beat_progress: 0.2,
+                ..input
+            },
+        );
+
+        assert_eq!(first, second);
+        assert_ne!(first, changed);
+        let frame = first
+            .iter()
+            .find_map(|command| match command {
+                DomeCommand::Frame(colors) => Some(colors),
+                DomeCommand::Flush | DomeCommand::Pixel { .. } => None,
+            })
+            .expect("tv static should write a frame");
+        assert!(frame.windows(2).take(100).any(|pair| pair[0] != pair[1]));
     }
 
     #[test]
