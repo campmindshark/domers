@@ -4,7 +4,7 @@ This document records the browser UI states worth checking. Add screenshots when
 
 ## Operator Shell
 
-The shell lives in `ui/index.html` and is checked by `node ui/check.mjs`.
+The shell is rendered by React components in `ui/src/main.tsx`, styled by shared CSS in `ui/src/styles.css`, built into `ui/dist`, and checked by `node ui/check.mjs`.
 
 Expected elements:
 

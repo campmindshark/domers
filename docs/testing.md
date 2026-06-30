@@ -8,6 +8,7 @@ The automated suite covers deterministic runtime behavior, protocol encoding, co
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cd ui && npm install && npm run build && cd ..
 node ui/check.mjs
 ```
 
@@ -40,6 +41,7 @@ replacement decisions stay visible.
 ```sh
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
+cd ui && npm install && npm run build && cd ..
 node ui/check.mjs
 ```
 

@@ -1,0 +1,21 @@
+{
+  "name": "domers-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rm -rf dist && mkdir -p dist/assets && esbuild src/main.tsx --bundle --format=esm --target=es2022 --outfile=dist/assets/main.js && mv dist/assets/main.css dist/assets/styles.css && node build-html.mjs",
+    "check": "tsc --noEmit",
+    "smoke": "node check.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/prop-types": "^15.7.15",
+    "esbuild": "^0.25.11",
+    "typescript": "^5.7.3",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5"
+  }
+}

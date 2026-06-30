@@ -873,6 +873,8 @@ impl AppRuntime {
             .route("/", get(index_html))
             .route("/simulator", get(simulator_html))
             .route("/main.mjs", get(main_js))
+            .route("/assets/main.js", get(main_js))
+            .route("/assets/styles.css", get(styles_css))
             .route("/api/health", get(health_json))
             .route("/api/state", get(get_state))
             .route("/api/start", post(start_engine))
@@ -1590,17 +1592,24 @@ impl SimulatorSandboxRequest {
 }
 
 async fn index_html() -> Html<&'static str> {
-    Html(include_str!("../../../ui/index.html"))
+    Html(include_str!("../../../ui/dist/index.html"))
 }
 
 async fn simulator_html() -> Html<&'static str> {
-    Html(include_str!("../../../ui/simulator.html"))
+    Html(include_str!("../../../ui/dist/simulator.html"))
 }
 
 async fn main_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
-        include_str!("../../../ui/main.mjs"),
+        include_str!("../../../ui/dist/assets/main.js"),
+    )
+}
+
+async fn styles_css() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        include_str!("../../../ui/dist/assets/styles.css"),
     )
 }
 

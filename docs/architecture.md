@@ -25,13 +25,15 @@ The browser simulator is driven by engine frame data. It does not read back from
 
 ## Runtime Surface
 
-The server crate implements both the in-process `ServerState` contract and the runnable HTTP/WebSocket adapter. The `domers` binary loads TOML config, serves the browser shell, exposes JSON API endpoints, and streams simulator frames over WebSocket.
+The server crate implements both the in-process `ServerState` contract and the runnable HTTP/WebSocket adapter. The `domers` binary loads TOML config, serves the browser shell, exposes JSON API endpoints, and streams simulator frames over WebSocket. The browser shell source is React and TypeScript under `ui/src`, with shared CSS in `ui/src/styles.css`; the Rust server embeds the checked `ui/dist` build output.
 
 HTTP and WebSocket surface:
 
 - `GET /`: browser operator shell
 - `GET /simulator`: dedicated simulator page
-- `GET /main.mjs`: browser control script
+- `GET /assets/main.js`: built React/TypeScript browser bundle
+- `GET /assets/styles.css`: shared UI stylesheet
+- `GET /main.mjs`: compatibility alias for the built browser bundle
 - `GET /api/health`: health JSON
 - `GET /api/state`: running state, engine config, simulator inputs, metrics, OPC target status, and input status
 - `POST /api/start`: start the engine loop

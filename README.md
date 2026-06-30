@@ -93,6 +93,7 @@ See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette 
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cd ui && npm install && npm run build && cd ..
 node ui/check.mjs
 ```
 

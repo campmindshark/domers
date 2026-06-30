@@ -1,0 +1,131 @@
+body {
+  background: #111;
+  color: #eee;
+  font-family: system-ui, sans-serif;
+  margin: 1rem;
+}
+
+body:not([data-page='simulator']) {
+  padding-bottom: 9rem;
+}
+
+a {
+  color: #8cc8ff;
+}
+
+canvas {
+  aspect-ratio: 1 / 1;
+  background: #000;
+  border: 1px solid #555;
+  box-sizing: border-box;
+  display: block;
+  height: auto;
+  max-width: calc(100vw - 2rem);
+  width: 100%;
+}
+
+output,
+.metric {
+  font-variant-numeric: tabular-nums;
+}
+
+label {
+  display: block;
+  margin: 0.75rem 0;
+}
+
+details {
+  border: 1px solid #444;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+summary {
+  cursor: pointer;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+fieldset {
+  border: 1px solid #444;
+  margin: 1rem 0;
+  padding: 1rem;
+}
+
+.swatches {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.palette-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.palette-card {
+  border: 1px solid #444;
+  padding: 0.75rem;
+}
+
+.palette-card h3 {
+  margin: 0 0 0.5rem;
+}
+
+.palette-entry {
+  border-top: 1px solid #333;
+  padding: 0.5rem 0;
+}
+
+.palette-entry:first-of-type {
+  border-top: 0;
+}
+
+.status-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.target-status {
+  border: 1px solid #444;
+  padding: 0.75rem;
+}
+
+.target-status strong {
+  display: block;
+}
+
+.config-editor {
+  background: #050505;
+  border: 1px solid #555;
+  box-sizing: border-box;
+  color: #eee;
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+.device-list {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.opc-targets-footer {
+  background: rgba(17, 17, 17, 0.95);
+  border-top: 1px solid #555;
+  bottom: 0;
+  box-shadow: 0 -0.25rem 1rem rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
+  left: 0;
+  padding: 0.75rem 1rem;
+  position: fixed;
+  right: 0;
+  z-index: 10;
+}
+
+.opc-targets-footer h2,
+.opc-targets-footer p {
+  margin: 0.25rem 0;
+}
