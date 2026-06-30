@@ -15,6 +15,10 @@
         background: #000;
         border: 1px solid #555;
       }
+      output,
+      .metric {
+        font-variant-numeric: tabular-nums;
+      }
       label {
         display: block;
         margin: 0.75rem 0;
@@ -28,6 +32,7 @@
         <button id="start-engine" type="button">Start</button>
         <button id="stop-engine" type="button">Stop</button>
         <span id="engine-status">stopped</span>
+        <span id="stream-status">stream disconnected</span>
       </section>
       <section aria-label="Dome Controls">
         <label>
@@ -46,7 +51,12 @@
         <label>
           Flash speed
           <input id="flash-speed" name="flashSpeed" type="range" min="0" max="8" step="0.125" value="0" />
+          <output id="flash-speed-value" for="flash-speed">0</output>
         </label>
+      </section>
+      <section aria-label="Metrics">
+        <p>Engine frames: <span id="metric-frames" class="metric">0</span></p>
+        <p>Simulator frames: <span id="metric-simulator-frames" class="metric">0</span></p>
       </section>
       <section aria-label="Simulator">
         <canvas id="dome-simulator" width="750" height="750" data-frame-source="websocket"></canvas>

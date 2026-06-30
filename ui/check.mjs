@@ -34,11 +34,28 @@ for (const marker of [
   'id="stop-engine"',
   'name="domeActiveVis"',
   'id="flash-speed"',
+  'id="stream-status"',
+  'id="metric-frames"',
+  'id="metric-simulator-frames"',
   'id="dome-simulator"',
   'data-frame-source="websocket"',
 ]) {
   if (!html.includes(marker)) {
     console.error(`Missing required UI marker: ${marker}`);
+    process.exit(1);
+  }
+}
+
+const js = await readFile(new URL('./main.mjs', import.meta.url), 'utf8');
+for (const marker of [
+  '/api/state',
+  '/api/start',
+  '/api/stop',
+  '/api/config/dome',
+  '/ws/simulator',
+]) {
+  if (!js.includes(marker)) {
+    console.error(`Missing required API marker: ${marker}`);
     process.exit(1);
   }
 }

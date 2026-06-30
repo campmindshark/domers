@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::migration::{analyze_spectrum_xml, MigrationReport};
 
 /// Minimal engine configuration used by the initial scheduler/output tests.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EngineConfig {
     /// Whether the dome hardware path is enabled.
     pub dome_enabled: bool,
@@ -175,6 +175,17 @@ impl Default for DomersConfig {
     }
 }
 
+impl From<&DomersConfig> for EngineConfig {
+    fn from(config: &DomersConfig) -> Self {
+        Self {
+            dome_enabled: config.dome.enabled,
+            dome_simulation_enabled: config.dome.simulation_enabled,
+            dome_active_vis: config.dome.active_visualizer,
+            dome_test_pattern: config.dome.test_pattern,
+        }
+    }
+}
+
 impl DomersConfig {
     /// Serialize config as pretty TOML.
     ///
@@ -327,5 +338,27 @@ mod tests {
 
         assert!(parsed.dome.simulation_enabled);
         assert_eq!(parsed.madmom.command, "DBNBeatTracker");
+    }
+
+    #[test]
+    fn domers_config_maps_to_engine_config() {
+        let config = DomersConfig {
+            dome: super::DomeConfig {
+                enabled: true,
+                simulation_enabled: false,
+                opc_address: "127.0.0.1:7890".to_string(),
+                active_visualizer: 3,
+                test_pattern: 2,
+                brightness: 0.5,
+            },
+            ..DomersConfig::default()
+        };
+
+        let engine = super::EngineConfig::from(&config);
+
+        assert!(engine.dome_enabled);
+        assert!(!engine.dome_simulation_enabled);
+        assert_eq!(engine.dome_active_vis, 3);
+        assert_eq!(engine.dome_test_pattern, 2);
     }
 }
