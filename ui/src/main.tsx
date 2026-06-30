@@ -46,6 +46,10 @@ function ConfigEditor() {
               <span className="field-hint">Address used by the bridge or simulator volume source.</span>
               <input id="config-audio-bind" name="configAudioBind" type="text" placeholder="127.0.0.1:9001" />
             </label>
+            <label className="checkbox-field">
+              <input id="config-audio-native-enabled" name="configAudioNativeEnabled" type="checkbox" />
+              <span>Native CPAL capture</span>
+            </label>
             <label className="config-field">
               <span className="config-field-label">Device ID</span>
               <span className="field-hint">Optional native device identifier. Leave blank to use bridge input only.</span>
@@ -58,6 +62,15 @@ function ConfigEditor() {
               <span className="config-field-label">UDP bind</span>
               <span className="field-hint">Address for MIDI command datagrams.</span>
               <input id="config-midi-bind" name="configMidiBind" type="text" placeholder="127.0.0.1:9002" />
+            </label>
+            <label className="checkbox-field">
+              <input id="config-midi-native-enabled" name="configMidiNativeEnabled" type="checkbox" />
+              <span>Native midir capture</span>
+            </label>
+            <label className="config-field">
+              <span className="config-field-label">Native MIDI port</span>
+              <span className="field-hint">Optional exact port name. First port is used when blank.</span>
+              <input id="config-midi-device-id" name="configMidiDeviceId" type="text" placeholder="Controller Port Name" />
             </label>
             <p className="midi-bindings-summary">
               <span className="config-field-label">Bindings</span>

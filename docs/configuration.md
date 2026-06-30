@@ -108,6 +108,7 @@ to enable a bridge input when `domers run` starts:
 ```toml
 [inputs.audio]
 bind = "127.0.0.1:5001" # text float payload, for example 0.42
+native_enabled = false # set true in a native-capture build to use CPAL
 device_id = "{0.0.1...}" # optional stable Spectrum endpoint id
 
 [[inputs.audio.devices]]
@@ -122,6 +123,8 @@ flow = "capture"
 
 [inputs.midi]
 bind = "127.0.0.1:5002" # note,64,1.0 or cc,1,0.5
+native_enabled = false # set true in a native-capture build to use midir
+device_id = "Controller Port Name"
 
 [[inputs.midi.bindings]]
 command_kind = "note"
@@ -158,6 +161,16 @@ Supported MIDI binding actions are:
 UDP audio and MIDI remain useful bridge transports, but they are not the full
 native-device scope. macOS/Linux native audio and MIDI capture are parity work;
 device identity/index semantics are already represented in config and tests.
+
+Native capture is available in builds compiled with:
+
+```sh
+cargo run --features native-capture --bin domers -- run --config domers.toml
+```
+
+The native path uses `cpal` for audio and `midir` for MIDI. On Linux, install
+ALSA development headers (for example `libasound2-dev`) before building with
+`native-capture`; macOS uses CoreAudio/CoreMIDI.
 
 `inputs.audio.devices` is optional. When present, it models Spectrum's audio
 enumeration rule: all active endpoints receive an index, but only capture

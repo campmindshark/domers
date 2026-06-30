@@ -144,6 +144,9 @@ pub struct UdpInputConfig {
 pub struct AudioInputConfig {
     /// Optional UDP volume bind. When unset, the UDP bridge is disabled.
     pub bind: Option<String>,
+    /// Enable native macOS/Linux audio capture through CPAL.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub native_enabled: bool,
     /// Stable Spectrum audio endpoint id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,
@@ -178,6 +181,12 @@ pub enum AudioDeviceFlowConfig {
 pub struct MidiInputConfig {
     /// Bind address. When unset, this input adapter is disabled.
     pub bind: Option<String>,
+    /// Enable native macOS/Linux MIDI capture through midir.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub native_enabled: bool,
+    /// Optional native MIDI port name to open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
     /// Runtime MIDI bindings.
     #[serde(default)]
     pub bindings: Vec<MidiBindingConfig>,
@@ -234,6 +243,8 @@ impl Default for MidiInputConfig {
     fn default() -> Self {
         Self {
             bind: None,
+            native_enabled: false,
+            device_id: None,
             bindings: vec![
                 MidiBindingConfig {
                     device_index: None,
@@ -542,6 +553,14 @@ fn normalize_palette_slots(mut colors: Vec<PaletteEntry>) -> Vec<PaletteEntry> {
     colors.truncate(ColorPalette::ENTRY_COUNT);
     colors.resize(ColorPalette::ENTRY_COUNT, PaletteEntry::default());
     colors
+}
+
+#[allow(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde skip_serializing_if requires a by-reference predicate"
+)]
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Serialize)]

@@ -8,14 +8,19 @@ rust-version.workspace = true
 
 [dependencies]
 axum = { version = "0.8.9", features = ["ws"] }
+cpal = { version = "0.17.3", optional = true }
 domers-core = { path = "../core" }
 domers-engine = { path = "../engine" }
 domers-inputs = { path = "../inputs" }
 domers-outputs = { path = "../outputs" }
 domers-visualizers = { path = "../visualizers" }
+midir = { version = "0.11.0", optional = true }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 tokio = { version = "1.52.3", features = ["io-util", "macros", "process", "rt-multi-thread", "time", "sync", "net"] }
+
+[features]
+native-capture = ["dep:cpal", "dep:midir"]
 
 [lints]
 workspace = true

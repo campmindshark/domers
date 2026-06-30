@@ -7,7 +7,7 @@
 - Browser control page served by the Rust binary at `/`.
 - Dedicated simulator page served at `/simulator`.
 - Runtime controls for engine start/stop, active dome visualizer, flash speed, active palette slot, and full palette colors/gradients.
-- Inputs drawer for tap tempo plus audio, MIDI, orientation, and Madmom adapter status.
+- Inputs drawer for tap tempo plus audio, MIDI, orientation, Madmom, Link, and MIDI level-driver status.
 - Debug Visuals drawer for dome, bar, and stage hardware-check patterns.
 - Live Preview drawer that mirrors the runtime frame stream used for hardware output.
 - Independent `/simulator` sandbox with local controls that do not change runtime config or hardware output.
@@ -15,8 +15,9 @@
 - Spectrum-compatible dome topology and projection data for the full 7,580-LED dome layout.
 - Spectrum-compatible OPC packet encoding.
 - Native TOML configuration with a Spectrum XML import command and shared-entry palette format.
-- Core input support for MIDI/audio UDP adapters, orientation datagram ingestion, tap tempo, and Madmom `BEAT:{seconds}` protocol parsing.
+- Core input support for MIDI/audio UDP adapters, optional macOS/Linux native capture, orientation datagram ingestion, tap tempo, and Madmom `BEAT:{seconds}` protocol parsing.
 - Managed Madmom sidecar lifecycle using `DBNBeatTracker --host_api --audio_input=<index> online`.
+- Ableton Link / Carabiner-compatible sidecar tempo sync and Spectrum ADSR MIDI level drivers.
 
 ## Quick Start
 

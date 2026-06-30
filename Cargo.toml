@@ -25,6 +25,9 @@ domers-outputs = { path = "crates/outputs" }
 domers-server = { path = "crates/server" }
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "signal"] }
 
+[features]
+native-capture = ["domers-server/native-capture"]
+
 [workspace.package]
 edition = "2021"
 license = "MIT"

@@ -11,8 +11,11 @@ const stageTestPattern = document.querySelector('#stage-test-pattern');
 const configEditor = document.querySelector('#config-editor');
 const configStatus = document.querySelector('#config-status');
 const configAudioBind = document.querySelector('#config-audio-bind');
+const configAudioNativeEnabled = document.querySelector('#config-audio-native-enabled');
 const configAudioDeviceId = document.querySelector('#config-audio-device-id');
 const configMidiBind = document.querySelector('#config-midi-bind');
+const configMidiNativeEnabled = document.querySelector('#config-midi-native-enabled');
+const configMidiDeviceId = document.querySelector('#config-midi-device-id');
 const configOrientationBind = document.querySelector('#config-orientation-bind');
 const configTempoSource = document.querySelector('#config-tempo-source');
 const configMadmomCommand = document.querySelector('#config-madmom-command');
@@ -118,11 +121,20 @@ function updateStructuredConfigFields(config) {
   if (configAudioBind) {
     configAudioBind.value = config.inputs?.audio?.bind ?? '';
   }
+  if (configAudioNativeEnabled) {
+    configAudioNativeEnabled.checked = Boolean(config.inputs?.audio?.native_enabled);
+  }
   if (configAudioDeviceId) {
     configAudioDeviceId.value = config.inputs?.audio?.device_id ?? '';
   }
   if (configMidiBind) {
     configMidiBind.value = config.inputs?.midi?.bind ?? '';
+  }
+  if (configMidiNativeEnabled) {
+    configMidiNativeEnabled.checked = Boolean(config.inputs?.midi?.native_enabled);
+  }
+  if (configMidiDeviceId) {
+    configMidiDeviceId.value = config.inputs?.midi?.device_id ?? '';
   }
   if (configOrientationBind) {
     configOrientationBind.value = config.inputs?.orientation?.bind ?? '';
@@ -253,8 +265,11 @@ function updateConfigFromStructuredFields() {
   config.bar ??= {};
   config.stage ??= {};
   writeOptionalString(config.inputs.audio, 'bind', configAudioBind?.value ?? '');
+  config.inputs.audio.native_enabled = Boolean(configAudioNativeEnabled?.checked);
   writeOptionalString(config.inputs.audio, 'device_id', configAudioDeviceId?.value ?? '');
   writeOptionalString(config.inputs.midi, 'bind', configMidiBind?.value ?? '');
+  config.inputs.midi.native_enabled = Boolean(configMidiNativeEnabled?.checked);
+  writeOptionalString(config.inputs.midi, 'device_id', configMidiDeviceId?.value ?? '');
   writeOptionalString(config.inputs.orientation, 'bind', configOrientationBind?.value ?? '');
   config.tempo.source = configTempoSource?.value ?? 'human';
   config.madmom.command = configMadmomCommand?.value?.trim() || 'DBNBeatTracker';

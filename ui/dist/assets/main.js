@@ -7316,11 +7316,20 @@ function updateStructuredConfigFields(config) {
   if (configAudioBind) {
     configAudioBind.value = config.inputs?.audio?.bind ?? "";
   }
+  if (configAudioNativeEnabled) {
+    configAudioNativeEnabled.checked = Boolean(config.inputs?.audio?.native_enabled);
+  }
   if (configAudioDeviceId) {
     configAudioDeviceId.value = config.inputs?.audio?.device_id ?? "";
   }
   if (configMidiBind) {
     configMidiBind.value = config.inputs?.midi?.bind ?? "";
+  }
+  if (configMidiNativeEnabled) {
+    configMidiNativeEnabled.checked = Boolean(config.inputs?.midi?.native_enabled);
+  }
+  if (configMidiDeviceId) {
+    configMidiDeviceId.value = config.inputs?.midi?.device_id ?? "";
   }
   if (configOrientationBind) {
     configOrientationBind.value = config.inputs?.orientation?.bind ?? "";
@@ -7443,8 +7452,11 @@ function updateConfigFromStructuredFields() {
   config.bar ??= {};
   config.stage ??= {};
   writeOptionalString(config.inputs.audio, "bind", configAudioBind?.value ?? "");
+  config.inputs.audio.native_enabled = Boolean(configAudioNativeEnabled?.checked);
   writeOptionalString(config.inputs.audio, "device_id", configAudioDeviceId?.value ?? "");
   writeOptionalString(config.inputs.midi, "bind", configMidiBind?.value ?? "");
+  config.inputs.midi.native_enabled = Boolean(configMidiNativeEnabled?.checked);
+  writeOptionalString(config.inputs.midi, "device_id", configMidiDeviceId?.value ?? "");
   writeOptionalString(config.inputs.orientation, "bind", configOrientationBind?.value ?? "");
   config.tempo.source = configTempoSource?.value ?? "human";
   config.madmom.command = configMadmomCommand?.value?.trim() || "DBNBeatTracker";
@@ -8031,7 +8043,7 @@ function connectSimulatorStream() {
     }
   });
 }
-var status, streamStatus, hardwareDome, hardwareStage, activeVisualizer, flashSpeed, flashSpeedValue, domeTestPattern, barTestPattern, stageTestPattern, configEditor, configStatus, configAudioBind, configAudioDeviceId, configMidiBind, configOrientationBind, configTempoSource, configMadmomCommand, configMadmomTracker, configMadmomAudioIndex, configCarabinerCommand, configCarabinerArgs, configMidiBindings, configDomeEnabled, configDomeSimulationEnabled, configDomeOpcAddress, configDomeBrightness, configBarEnabled, configBarSimulationEnabled, configBarInfinityLength, configBarInfinityWidth, configBarRunnerLength, configBarBrightness, configStageEnabled, configStageSimulationEnabled, configStageOpcAddress, configStageBrightness, configStageSideLengths, simVolume, simVolumeValue, simBeatProgress, simBeatProgressValue, simFlashActive, paletteIndex, paletteGrid, paletteControls, inputAudio, inputMidi, inputMidiLevels, inputOrientation, inputMadmom, inputLink, orientationDevices, midiLog, tempoBpm, tapCounter, sandboxActiveVisualizer, sandboxVolume, sandboxVolumeValue, sandboxBeatProgress, sandboxBeatProgressValue, sandboxFlashActive, sandboxPalettePrimary, sandboxPaletteSecondary, sandboxPaletteAccent, metricFrames, metricSimulatorFrames, previewDrawer, canvas, context, barSimulator, stageSimulator, isDedicatedSimulatorPage, SPECTRUM_CANVAS_SIZE, SPECTRUM_PROJECTION_OFFSET, SPECTRUM_PROJECTION_SPAN, domeLayout, domeLedPoints, latestSimulatorFrame, simulatorStarted, simulatorSocket;
+var status, streamStatus, hardwareDome, hardwareStage, activeVisualizer, flashSpeed, flashSpeedValue, domeTestPattern, barTestPattern, stageTestPattern, configEditor, configStatus, configAudioBind, configAudioNativeEnabled, configAudioDeviceId, configMidiBind, configMidiNativeEnabled, configMidiDeviceId, configOrientationBind, configTempoSource, configMadmomCommand, configMadmomTracker, configMadmomAudioIndex, configCarabinerCommand, configCarabinerArgs, configMidiBindings, configDomeEnabled, configDomeSimulationEnabled, configDomeOpcAddress, configDomeBrightness, configBarEnabled, configBarSimulationEnabled, configBarInfinityLength, configBarInfinityWidth, configBarRunnerLength, configBarBrightness, configStageEnabled, configStageSimulationEnabled, configStageOpcAddress, configStageBrightness, configStageSideLengths, simVolume, simVolumeValue, simBeatProgress, simBeatProgressValue, simFlashActive, paletteIndex, paletteGrid, paletteControls, inputAudio, inputMidi, inputMidiLevels, inputOrientation, inputMadmom, inputLink, orientationDevices, midiLog, tempoBpm, tapCounter, sandboxActiveVisualizer, sandboxVolume, sandboxVolumeValue, sandboxBeatProgress, sandboxBeatProgressValue, sandboxFlashActive, sandboxPalettePrimary, sandboxPaletteSecondary, sandboxPaletteAccent, metricFrames, metricSimulatorFrames, previewDrawer, canvas, context, barSimulator, stageSimulator, isDedicatedSimulatorPage, SPECTRUM_CANVAS_SIZE, SPECTRUM_PROJECTION_OFFSET, SPECTRUM_PROJECTION_SPAN, domeLayout, domeLedPoints, latestSimulatorFrame, simulatorStarted, simulatorSocket;
 var init_main = __esm({
   async "domers/ui/main.mjs"() {
     "use strict";
@@ -8048,8 +8060,11 @@ var init_main = __esm({
     configEditor = document.querySelector("#config-editor");
     configStatus = document.querySelector("#config-status");
     configAudioBind = document.querySelector("#config-audio-bind");
+    configAudioNativeEnabled = document.querySelector("#config-audio-native-enabled");
     configAudioDeviceId = document.querySelector("#config-audio-device-id");
     configMidiBind = document.querySelector("#config-midi-bind");
+    configMidiNativeEnabled = document.querySelector("#config-midi-native-enabled");
+    configMidiDeviceId = document.querySelector("#config-midi-device-id");
     configOrientationBind = document.querySelector("#config-orientation-bind");
     configTempoSource = document.querySelector("#config-tempo-source");
     configMadmomCommand = document.querySelector("#config-madmom-command");
@@ -8240,6 +8255,10 @@ function ConfigEditor() {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Address used by the bridge or simulator volume source." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-audio-bind", name: "configAudioBind", type: "text", placeholder: "127.0.0.1:9001" })
           ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "checkbox-field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-audio-native-enabled", name: "configAudioNativeEnabled", type: "checkbox" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Native CPAL capture" })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Device ID" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Optional native device identifier. Leave blank to use bridge input only." }),
@@ -8252,6 +8271,15 @@ function ConfigEditor() {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "UDP bind" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Address for MIDI command datagrams." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-midi-bind", name: "configMidiBind", type: "text", placeholder: "127.0.0.1:9002" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "checkbox-field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-midi-native-enabled", name: "configMidiNativeEnabled", type: "checkbox" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Native midir capture" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Native MIDI port" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Optional exact port name. First port is used when blank." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-midi-device-id", name: "configMidiDeviceId", type: "text", placeholder: "Controller Port Name" })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "midi-bindings-summary", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Bindings" }),

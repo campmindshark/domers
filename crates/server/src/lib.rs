@@ -12,6 +12,8 @@ use axum::{
     routing::{get, patch, post},
     Json, Router,
 };
+#[cfg(feature = "native-capture")]
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use domers_core::{
     BeatBroadcaster, ColorPalette, DomersConfig, EngineConfig, LevelDriverPresetConfig,
     MidiBindingAction, MidiBindingCommandKind, MidiBindingConfig, PaletteEntry, Rgb, TempoSource,
@@ -33,6 +35,8 @@ use domers_visualizers::{
     StageVisualizer, VisualizerInput,
 };
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "native-capture")]
+use tokio::sync::mpsc;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     net::{TcpListener, UdpSocket},
@@ -705,16 +709,26 @@ impl ServerState {
 
     /// Configure live input adapter targets for status reporting.
     pub fn configure_input_adapters(&mut self, config: &DomersConfig) {
-        self.inputs.audio_adapter.enabled = config.inputs.audio.bind.is_some();
-        self.inputs
-            .audio_adapter
-            .target
-            .clone_from(&config.inputs.audio.bind);
-        self.inputs.midi_adapter.enabled = config.inputs.midi.bind.is_some();
-        self.inputs
-            .midi_adapter
-            .target
-            .clone_from(&config.inputs.midi.bind);
+        self.inputs.audio_adapter.enabled =
+            config.inputs.audio.bind.is_some() || config.inputs.audio.native_enabled;
+        self.inputs.audio_adapter.target = if config.inputs.audio.native_enabled {
+            Some(config.inputs.audio.device_id.clone().map_or_else(
+                || "native audio".to_string(),
+                |device| format!("native:{device}"),
+            ))
+        } else {
+            config.inputs.audio.bind.clone()
+        };
+        self.inputs.midi_adapter.enabled =
+            config.inputs.midi.bind.is_some() || config.inputs.midi.native_enabled;
+        self.inputs.midi_adapter.target = if config.inputs.midi.native_enabled {
+            Some(config.inputs.midi.device_id.clone().map_or_else(
+                || "native MIDI".to_string(),
+                |device| format!("native:{device}"),
+            ))
+        } else {
+            config.inputs.midi.bind.clone()
+        };
         self.inputs.orientation_adapter.enabled = config.inputs.orientation.bind.is_some();
         self.inputs
             .orientation_adapter
@@ -1163,8 +1177,14 @@ impl AppRuntime {
         if let Some(bind) = &config.inputs.audio.bind {
             tasks.push(spawn_audio_udp_task(self.state.clone(), bind.clone()));
         }
+        if config.inputs.audio.native_enabled {
+            tasks.push(spawn_native_audio_task(self.state.clone(), config.clone()));
+        }
         if let Some(bind) = &config.inputs.midi.bind {
             tasks.push(spawn_midi_udp_task(self.state.clone(), bind.clone()));
+        }
+        if config.inputs.midi.native_enabled {
+            tasks.push(spawn_native_midi_task(self.state.clone(), config.clone()));
         }
         if let Some(bind) = &config.inputs.orientation.bind {
             tasks.push(spawn_orientation_udp_task(self.state.clone(), bind.clone()));
@@ -1404,6 +1424,310 @@ fn spawn_midi_udp_task(state: Arc<Mutex<ServerState>>, bind: String) -> JoinHand
             }
         }
     })
+}
+
+#[cfg(feature = "native-capture")]
+fn spawn_native_audio_task(state: Arc<Mutex<ServerState>>, config: DomersConfig) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let host = cpal::default_host();
+        let device = match native_audio_device(&host, config.inputs.audio.device_id.as_deref()) {
+            Ok(device) => device,
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Audio, error);
+                return;
+            }
+        };
+        let stream_config = match device.default_input_config() {
+            Ok(config) => config,
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Audio, error.to_string());
+                return;
+            }
+        };
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let err_state = state.clone();
+        let stream = match build_native_audio_stream(&device, &stream_config, tx) {
+            Ok(stream) => stream,
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Audio, error);
+                return;
+            }
+        };
+        if let Err(error) = stream.play() {
+            state
+                .lock()
+                .await
+                .record_input_adapter_error(InputAdapter::Audio, error.to_string());
+            return;
+        }
+        while let Some(volume) = rx.recv().await {
+            state.lock().await.apply_audio_volume(volume);
+        }
+        drop(stream);
+        err_state
+            .lock()
+            .await
+            .record_input_adapter_error(InputAdapter::Audio, "native audio stream closed");
+    })
+}
+
+#[cfg(not(feature = "native-capture"))]
+fn spawn_native_audio_task(
+    state: Arc<Mutex<ServerState>>,
+    _config: DomersConfig,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        state.lock().await.record_input_adapter_error(
+            InputAdapter::Audio,
+            "native audio capture requires the native-capture build feature",
+        );
+    })
+}
+
+#[cfg(feature = "native-capture")]
+fn spawn_native_midi_task(state: Arc<Mutex<ServerState>>, config: DomersConfig) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut input = match midir::MidiInput::new("domers-native-midi") {
+            Ok(input) => input,
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Midi, error.to_string());
+                return;
+            }
+        };
+        input.ignore(midir::Ignore::None);
+        let ports = input.ports();
+        let Some(port) = native_midi_port(&input, &ports, config.inputs.midi.device_id.as_deref())
+        else {
+            state
+                .lock()
+                .await
+                .record_input_adapter_error(InputAdapter::Midi, "native MIDI port not found");
+            return;
+        };
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let connection = match input.connect(
+            &port,
+            "domers-native-midi-input",
+            move |_timestamp, message, _| {
+                if let Some(command) = midi_message_to_command(0, message) {
+                    let _ = tx.send(command);
+                }
+            },
+            (),
+        ) {
+            Ok(connection) => connection,
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Midi, error.to_string());
+                return;
+            }
+        };
+        while let Some(command) = rx.recv().await {
+            state.lock().await.apply_midi_commands(&[command]);
+        }
+        drop(connection);
+    })
+}
+
+#[cfg(not(feature = "native-capture"))]
+fn spawn_native_midi_task(state: Arc<Mutex<ServerState>>, _config: DomersConfig) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        state.lock().await.record_input_adapter_error(
+            InputAdapter::Midi,
+            "native MIDI capture requires the native-capture build feature",
+        );
+    })
+}
+
+#[cfg(feature = "native-capture")]
+fn native_audio_device(
+    host: &cpal::Host,
+    configured_device: Option<&str>,
+) -> Result<cpal::Device, String> {
+    if let Some(configured_device) = configured_device {
+        let devices = host.input_devices().map_err(|error| error.to_string())?;
+        for device in devices {
+            if device
+                .name()
+                .map(|name| name == configured_device)
+                .unwrap_or(false)
+            {
+                return Ok(device);
+            }
+        }
+        Err(format!(
+            "native audio device not found: {configured_device}"
+        ))
+    } else {
+        host.default_input_device()
+            .ok_or_else(|| "native default audio input not found".to_string())
+    }
+}
+
+#[cfg(feature = "native-capture")]
+fn build_native_audio_stream(
+    device: &cpal::Device,
+    config: &cpal::SupportedStreamConfig,
+    tx: mpsc::UnboundedSender<f32>,
+) -> Result<cpal::Stream, String> {
+    let stream_config = config.config();
+    let channels = usize::from(stream_config.channels.max(1));
+    let err_fn = |error| eprintln!("native audio stream error: {error}");
+    match config.sample_format() {
+        cpal::SampleFormat::F32 => device
+            .build_input_stream(
+                &stream_config,
+                move |data: &[f32], _| {
+                    let _ = tx.send(rms_volume_f32(data, channels));
+                },
+                err_fn,
+                None,
+            )
+            .map_err(|error| error.to_string()),
+        cpal::SampleFormat::I16 => device
+            .build_input_stream(
+                &stream_config,
+                move |data: &[i16], _| {
+                    let _ = tx.send(rms_volume_i16(data, channels));
+                },
+                err_fn,
+                None,
+            )
+            .map_err(|error| error.to_string()),
+        cpal::SampleFormat::U16 => device
+            .build_input_stream(
+                &stream_config,
+                move |data: &[u16], _| {
+                    let _ = tx.send(rms_volume_u16(data, channels));
+                },
+                err_fn,
+                None,
+            )
+            .map_err(|error| error.to_string()),
+        sample_format => Err(format!(
+            "unsupported native audio sample format: {sample_format:?}"
+        )),
+    }
+}
+
+#[cfg(feature = "native-capture")]
+fn native_midi_port(
+    input: &midir::MidiInput,
+    ports: &[midir::MidiInputPort],
+    configured_device: Option<&str>,
+) -> Option<midir::MidiInputPort> {
+    if let Some(configured_device) = configured_device {
+        ports.iter().find_map(|port| {
+            input
+                .port_name(port)
+                .ok()
+                .filter(|name| name == configured_device)
+                .map(|_| port.clone())
+        })
+    } else {
+        ports.first().cloned()
+    }
+}
+
+#[cfg(feature = "native-capture")]
+fn midi_message_to_command(device_index: u8, message: &[u8]) -> Option<MidiCommand> {
+    let status = *message.first()?;
+    let kind = status & 0xf0;
+    match kind {
+        0x80 => Some(MidiCommand {
+            device_index,
+            kind: MidiCommandKind::Note,
+            index: *message.get(1)?,
+            value: 0.0,
+        }),
+        0x90 => {
+            let velocity = f32::from(*message.get(2)?) / 127.0;
+            Some(MidiCommand {
+                device_index,
+                kind: MidiCommandKind::Note,
+                index: *message.get(1)?,
+                value: velocity.clamp(0.0, 1.0),
+            })
+        }
+        0xb0 => {
+            let value = f32::from(*message.get(2)?) / 127.0;
+            Some(MidiCommand {
+                device_index,
+                kind: MidiCommandKind::ControlChange,
+                index: *message.get(1)?,
+                value: value.clamp(0.0, 1.0),
+            })
+        }
+        0xc0 => Some(MidiCommand {
+            device_index,
+            kind: MidiCommandKind::Program,
+            index: *message.get(1)?,
+            value: 1.0,
+        }),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "native-capture")]
+fn rms_volume_f32(samples: &[f32], channels: usize) -> f32 {
+    rms_volume(
+        samples
+            .iter()
+            .step_by(channels)
+            .map(|sample| f64::from(*sample)),
+    )
+}
+
+#[cfg(feature = "native-capture")]
+fn rms_volume_i16(samples: &[i16], channels: usize) -> f32 {
+    rms_volume(
+        samples
+            .iter()
+            .step_by(channels)
+            .map(|sample| f64::from(*sample) / f64::from(i16::MAX)),
+    )
+}
+
+#[cfg(feature = "native-capture")]
+fn rms_volume_u16(samples: &[u16], channels: usize) -> f32 {
+    rms_volume(
+        samples
+            .iter()
+            .step_by(channels)
+            .map(|sample| (f64::from(*sample) - 32768.0) / 32768.0),
+    )
+}
+
+#[cfg(feature = "native-capture")]
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "RMS value is clamped to the normalized f32 visualizer input range"
+)]
+fn rms_volume(samples: impl Iterator<Item = f64>) -> f32 {
+    let mut count = 0_u64;
+    let mut sum = 0.0;
+    for sample in samples {
+        count = count.saturating_add(1);
+        sum += sample * sample;
+    }
+    if count == 0 {
+        return 0.0;
+    }
+    (sum / count as f64).sqrt().clamp(0.0, 1.0) as f32
 }
 
 fn spawn_orientation_udp_task(state: Arc<Mutex<ServerState>>, bind: String) -> JoinHandle<()> {
@@ -2878,6 +3202,37 @@ mod tests {
         assert_eq!(snapshot.inputs.beat_ms, Some(667));
         assert_eq!(snapshot.inputs.bpm, "89");
         assert_eq!(snapshot.inputs.link_adapter.last_error, None);
+    }
+
+    #[cfg(not(feature = "native-capture"))]
+    #[tokio::test]
+    async fn native_capture_without_feature_reports_status_errors() {
+        let mut config = DomersConfig::default();
+        config.inputs.audio.native_enabled = true;
+        config.inputs.midi.native_enabled = true;
+        let runtime = AppRuntime::new(config);
+
+        runtime.start().await;
+        let mut snapshot = runtime.snapshot().await;
+        for _ in 0..20 {
+            if snapshot.inputs.audio_adapter.last_error.is_some()
+                && snapshot.inputs.midi_adapter.last_error.is_some()
+            {
+                break;
+            }
+            time::sleep(Duration::from_millis(10)).await;
+            snapshot = runtime.snapshot().await;
+        }
+        runtime.stop().await;
+
+        assert_eq!(
+            snapshot.inputs.audio_adapter.last_error.as_deref(),
+            Some("native audio capture requires the native-capture build feature")
+        );
+        assert_eq!(
+            snapshot.inputs.midi_adapter.last_error.as_deref(),
+            Some("native MIDI capture requires the native-capture build feature")
+        );
     }
 
     #[test]
