@@ -8,6 +8,7 @@ const required = [
   '../docs/hardware-mapping.md',
   '../docs/hardware-readiness.md',
   '../docs/images/.gitkeep',
+  '../docs/intentional-deviations.md',
   '../docs/porting-inventory.md',
   '../docs/testing.md',
   '../docs/ui-expectations.md',

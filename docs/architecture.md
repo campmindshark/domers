@@ -1,6 +1,6 @@
 # Architecture
 
-Domers is structured as a headless Rust engine with browser control and simulator views.
+Domers is a headless Rust engine with browser control and simulator views.
 
 ## Crates
 
@@ -21,13 +21,13 @@ Browser UI -> Server contract -> Engine scheduler -> Inputs + Visualizers -> Out
                                                         +--------------------> Simulator frames
 ```
 
-The browser simulator is driven by engine frame data, not by hardware sockets. This keeps UI validation possible without a BeagleBone or LED fixtures connected.
+The browser simulator is driven by engine frame data. It does not read back from OPC hardware sockets.
 
 ## Timing Contracts
 
-- Engine target: Spectrum-compatible 400 Hz compute cap.
+- Engine target: 400 Hz compute cap.
 - OPC target: independent 200 Hz send cap.
-- Browser simulator: throttled stream derived from engine frames, not hardware sockets.
+- Browser simulator: throttled stream derived from engine frames.
 
 Example future timing test shape:
 
@@ -35,23 +35,28 @@ Example future timing test shape:
 fake clock -> scheduler frame -> visualizer render -> simulator frame -> metrics update
 ```
 
-## Concurrency Contract
+## State And Concurrency
 
-The Rust implementation should prefer frame-local config snapshots and event channels over shared mutable UI state. Stress tests must cover concurrent config updates, MIDI replay, and visualizer frames.
+The engine should process each frame from a stable config snapshot plus a drained batch of input/control events. Browser config edits, MIDI commands, audio samples, orientation datagrams, and Madmom beat reports should enter through explicit event paths instead of mutating shared UI state mid-frame.
 
-## Configuration Contract
+Stress tests should cover:
 
-Domers-native configuration is TOML. XML is not a runtime config format for the Rust app; it is only a legacy Spectrum import format handled by:
+- config updates during frame production
+- MIDI replay during visualizer rendering
+- simulator frame production during input bursts
+- metrics updates after each frame
 
-```sh
-cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml>
-```
+## Configuration
 
-The importer maps live Spectrum fields into nested Domers sections such as `[dome]`, `[bar]`, `[stage]`, `[tempo]`, and `[madmom]`, and reports stale or unsupported XML fields instead of silently preserving them. See [`configuration.md`](configuration.md).
+Domers-native configuration is TOML. Runtime code should load TOML, not XML. Legacy Spectrum XML is handled only by the import command documented in [`configuration.md`](configuration.md).
 
-## Madmom Contract
+## Beat Input
 
-Domers keeps Madmom as a configurable sidecar protocol for v1 compatibility: the sidecar emits `BEAT:{seconds}` lines that feed the beat engine. Unlike the Windows WPF app, Domers does not assume a bundled `Madmom/env/Scripts/python.exe` path. The TOML config owns the command/path, which leaves room for either a Python sidecar, a Docker-sidecar test fake, or a future native Rust beat detector behind the same beat-report interface.
+The beat engine accepts beat events from tap tempo, fake tests, and the configurable Madmom-compatible sidecar protocol. The architecture depends on beat events, not on a specific Python installation path.
+
+## Intentional Deviations
+
+Spectrum compatibility decisions and explicit differences are tracked in [`intentional-deviations.md`](intentional-deviations.md). Keep this file focused on Domers architecture; put historical comparisons and deliberate departures there.
 
 ## TODO Images
 

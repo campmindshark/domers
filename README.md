@@ -53,6 +53,8 @@ audio_input_index = 0
 ```
 
 See [`docs/configuration.md`](docs/configuration.md) for the full config/import contract.
+Intentional differences from Spectrum are tracked in
+[`docs/intentional-deviations.md`](docs/intentional-deviations.md).
 
 ## Madmom
 

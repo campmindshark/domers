@@ -2,6 +2,9 @@
 
 Domers uses TOML as its native runtime configuration format. XML is not a runtime configuration format for the Rust app. Spectrum XML is only accepted by the import command so existing show/laptop configs can be migrated intentionally.
 
+Intentional differences from Spectrum runtime config are tracked in
+[`intentional-deviations.md`](intentional-deviations.md).
+
 ## Native TOML
 
 A Domers config is organized into fixture and subsystem sections:
@@ -90,6 +93,8 @@ The command can point at a Python wrapper, a virtualenv executable, a script, or
 ```text
 BEAT:12.345
 ```
+
+See [`intentional-deviations.md`](intentional-deviations.md) for the rationale.
 
 ## TODO Images
 

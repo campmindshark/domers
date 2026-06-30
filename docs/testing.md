@@ -22,6 +22,10 @@ node ui/check.mjs
 - Server state contract for config patching, start/stop, metrics, and simulator frames.
 - UI smoke markers for the initial browser shell.
 
+Tests for intentional behavior changes should cite
+[`intentional-deviations.md`](intentional-deviations.md) so it is clear whether
+Domers is preserving Spectrum behavior or deliberately replacing it.
+
 ## Example Local Run
 
 ```sh
