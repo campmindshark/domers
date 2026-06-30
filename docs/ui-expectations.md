@@ -11,6 +11,7 @@ Expected elements:
 - `MindShark Dome Controls` heading
 - `Start` and `Stop` engine buttons
 - engine status text
+- `OPC Targets` panel showing dome/bar and stage target addresses, enabled state, connection state, successful frame count, and last error
 - WebSocket stream status text
 - `domeActiveVis` selector with Volume, Radial, Race, Snakes, Quaternion Test, Quaternion Multi Test, Quaternion Paintbrush, Splat, and TV Static
 - `flashSpeed` slider
@@ -31,6 +32,7 @@ Expected behavior after clicking `Start`:
 
 - engine status changes to `running`
 - controls remain interactive
+- enabled OPC targets show `connected` and an increasing frame count after successful TCP writes
 - frame counters advance while the engine is running
 - opening the `Preview` drawer connects the simulator stream and shows runtime frame data
 - closing the drawer stops requesting browser preview frames

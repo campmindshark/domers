@@ -49,6 +49,18 @@
         gap: 0.75rem;
         grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
       }
+      .status-grid {
+        display: grid;
+        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+      }
+      .target-status {
+        border: 1px solid #444;
+        padding: 0.75rem;
+      }
+      .target-status strong {
+        display: block;
+      }
     </style>
   </head>
   <body>
@@ -58,6 +70,20 @@
         <button id="start-engine" type="button">Start</button>
         <button id="stop-engine" type="button">Stop</button>
         <span id="engine-status">stopped</span>
+      </section>
+      <section aria-label="OPC Targets">
+        <h2>OPC Targets</h2>
+        <p>Shows the configured hardware targets and whether the server is successfully writing OPC frames.</p>
+        <div class="status-grid">
+          <p class="target-status">
+            <strong>Dome / Bar</strong>
+            <span id="hardware-dome">disabled</span>
+          </p>
+          <p class="target-status">
+            <strong>Stage</strong>
+            <span id="hardware-stage">disabled</span>
+          </p>
+        </div>
       </section>
       <section aria-label="Runtime Controls">
         <h2>Runtime Controls</h2>

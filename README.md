@@ -18,17 +18,35 @@
 
 ## Quick Start
 
+Start the operator server with the checked example config:
+
 ```sh
 cargo run --bin domers -- run --config examples/domers.toml --bind 127.0.0.1:3000
 ```
 
 Open `http://127.0.0.1:3000` and use **MindShark Dome Controls**.
 
-Check config, bind address, OPC address syntax, and Madmom command availability without starting output:
+## Hardware Startup
+
+`examples/domers.toml` is generated from the dome's Spectrum XML, but its OPC hosts are set to `127.0.0.1` so local loopback services can stand in for ledscape during development. To connect to physical controllers, copy the config and set the enabled hardware targets to the show network addresses:
+
+```toml
+[dome]
+enabled = true
+opc_address = "192.168.1.69:7890"
+
+[stage]
+enabled = true
+opc_address = "192.168.1.70:7890"
+```
+
+Check config, bind address, OPC address syntax, and Madmom command availability before starting output:
 
 ```sh
-cargo run --bin domers -- doctor --config examples/domers.toml --bind 127.0.0.1:3000
+cargo run --bin domers -- doctor --config domers.toml --bind 127.0.0.1:3000
 ```
+
+Then start with the same config, click `Start`, and check the **OPC Targets** panel on the controls page. It shows each configured target address, enabled state, TCP connection state, successful frame count, and the last connection/write error.
 
 ## Configuration
 
@@ -91,5 +109,5 @@ node ui/check.mjs
 TODO: Add image of the MindShark Dome Controls page here.
 
 - Capture: full browser window at desktop size.
-- Expected: title, start/stop buttons, runtime controls, metrics, stream status, and a closed Preview drawer are visible.
+- Expected: title, start/stop buttons, OPC Targets panel, runtime controls, metrics, stream status, and a closed Preview drawer are visible.
 - Suggested file: `docs/images/readme-operator-shell.png`.

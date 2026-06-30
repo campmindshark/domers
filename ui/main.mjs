@@ -1,5 +1,7 @@
 const status = document.querySelector('#engine-status');
 const streamStatus = document.querySelector('#stream-status');
+const hardwareDome = document.querySelector('#hardware-dome');
+const hardwareStage = document.querySelector('#hardware-stage');
 const activeVisualizer = document.querySelector('#dome-active-vis');
 const flashSpeed = document.querySelector('#flash-speed');
 const flashSpeedValue = document.querySelector('#flash-speed-value');
@@ -66,6 +68,8 @@ function updateSnapshot(snapshot) {
   if (metricSimulatorFrames) {
     metricSimulatorFrames.textContent = String(snapshot.metrics.simulator_frames);
   }
+  updateHardwareStatus(hardwareDome, snapshot.hardware?.dome);
+  updateHardwareStatus(hardwareStage, snapshot.hardware?.stage);
   if (activeVisualizer) {
     activeVisualizer.value = String(snapshot.config.dome_active_vis);
   }
@@ -102,6 +106,23 @@ function updateSnapshot(snapshot) {
   if (paletteAccent) {
     paletteAccent.value = toColorInput(paletteColor(snapshot, 2));
   }
+}
+
+function updateHardwareStatus(element, target) {
+  if (!element || !target) {
+    return;
+  }
+
+  const address = target.address ?? 'no address configured';
+  if (!target.enabled) {
+    element.textContent = `${address} - disabled`;
+    return;
+  }
+
+  const state = target.connected ? 'connected' : 'not connected';
+  const frames = `${target.frames_sent ?? 0} frames sent`;
+  const error = target.last_error ? ` - last error: ${target.last_error}` : '';
+  element.textContent = `${address} - ${state}, ${frames}${error}`;
 }
 
 function toColorInput(color) {

@@ -109,6 +109,8 @@ pub struct HardwareTargetStatus {
     pub address: Option<String>,
     /// Whether a TCP client is currently connected.
     pub connected: bool,
+    /// Number of frames successfully written to the TCP target.
+    pub frames_sent: u64,
     /// Last connection or write error, if any.
     pub last_error: Option<String>,
 }
@@ -500,8 +502,11 @@ impl AppRuntime {
 
     /// Return a server snapshot.
     pub async fn snapshot(&self) -> ServerSnapshot {
-        let mut snapshot = self.state.lock().await.snapshot();
-        snapshot.hardware = self.hardware.lock().await.status();
+        let (mut snapshot, config) = {
+            let state = self.state.lock().await;
+            (state.snapshot(), state.full_config())
+        };
+        snapshot.hardware = self.hardware.lock().await.status_for_config(&config);
         snapshot
     }
 
@@ -651,6 +656,15 @@ impl HardwareOutputs {
         }
     }
 
+    fn status_for_config(&self, config: &DomersConfig) -> HardwareStatus {
+        let mut status = self.status();
+        status.dome.enabled = config.dome.enabled || config.bar.enabled;
+        status.dome.address = Some(config.dome.opc_address.clone());
+        status.stage.enabled = config.stage.enabled;
+        status.stage.address = Some(config.stage.opc_address.clone());
+        status
+    }
+
     async fn send_operator_frame(&mut self, config: &DomersConfig, frame: &OperatorCommandFrame) {
         if config.dome.enabled {
             apply_dome_commands(&mut self.dome_channel, &frame.dome);
@@ -757,6 +771,7 @@ impl HardwareTarget {
                 self.status.last_error = Some(error.to_string());
             } else {
                 self.status.connected = true;
+                self.status.frames_sent = self.status.frames_sent.saturating_add(1);
                 self.status.last_error = None;
             }
         }
@@ -1631,6 +1646,7 @@ mod tests {
         assert_eq!(header[0], 0);
         assert_eq!(&body[byte_index..byte_index + 3], &[0xff, 0, 0]);
         assert!(hardware.status().dome.connected);
+        assert_eq!(hardware.status().dome.frames_sent, 1);
     }
 
     #[tokio::test]

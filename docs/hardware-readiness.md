@@ -8,6 +8,7 @@ Hardware validation gates release tags. Complete this checklist after the automa
 - Confirm `cargo clippy --workspace --all-targets -- -D warnings` passes.
 - Confirm UI smoke check passes.
 - Confirm `no_hardware_server_migration_and_simulator_smoke` passes.
+- Confirm `domers doctor --config domers.toml --bind 127.0.0.1:3000` passes with the hardware config.
 - Record commit SHA, operator laptop OS, and fixture capture date.
 
 ## Dome
@@ -62,6 +63,7 @@ TODO: Add image of expected input status panel.
 ## Network And Recovery
 
 - Verify OPC reconnect after controller restart or cable interruption.
+- Verify the controls page **OPC Targets** panel shows the expected addresses, `connected`, increasing frame counts, and no last error while output is running.
 - Verify server start/stop from browser UI.
 - Verify simulator frame stream remains responsive during a 60-second run.
 

@@ -114,6 +114,28 @@ warning: InvalidMidiBindingTarget: snareT
 warning: InertField: domeAutoFlashDelay
 ```
 
+## Hardware Targets
+
+The checked `examples/domers.toml` uses localhost OPC targets. For physical output, copy the file and replace enabled target addresses with the ledscape hosts on the show network:
+
+```toml
+[dome]
+enabled = true
+opc_address = "192.168.1.69:7890"
+
+[stage]
+enabled = true
+opc_address = "192.168.1.70:7890"
+```
+
+Run `domers doctor` before starting output:
+
+```sh
+cargo run --bin domers -- doctor --config domers.toml --bind 127.0.0.1:3000
+```
+
+After clicking `Start`, the controls page **OPC Targets** panel shows the configured addresses, whether each target is enabled, current TCP connection state, successful frame count, and the most recent connection/write error. A connected target with an increasing frame count means `dome-rs` is successfully writing OPC frames to that TCP endpoint; physical LED confirmation is still part of hardware sign-off.
+
 ## Madmom Config
 
 Madmom remains a managed beat sidecar. The current input crate parses beat lines and includes a sidecar wrapper for Spectrum's launch contract.

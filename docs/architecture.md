@@ -33,7 +33,7 @@ HTTP and WebSocket surface:
 - `GET /simulator`: dedicated simulator page
 - `GET /main.mjs`: browser control script
 - `GET /api/health`: health JSON
-- `GET /api/state`: running state, engine config, simulator inputs, metrics, hardware status, and input status
+- `GET /api/state`: running state, engine config, simulator inputs, metrics, OPC target status, and input status
 - `POST /api/start`: start the engine loop
 - `POST /api/stop`: stop the engine loop
 - `PATCH /api/config/dome`: patch runtime dome controls: active visualizer, flash speed, and palette slot

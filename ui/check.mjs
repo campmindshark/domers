@@ -38,6 +38,9 @@ for (const marker of [
   'Runtime palette colors',
   'id="start-engine"',
   'id="stop-engine"',
+  'aria-label="OPC Targets"',
+  'id="hardware-dome"',
+  'id="hardware-stage"',
   'name="domeActiveVis"',
   'TV Static',
   'id="flash-speed"',
@@ -88,6 +91,7 @@ for (const marker of [
 const js = await readFile(new URL('./main.mjs', import.meta.url), 'utf8');
 for (const marker of [
   '/api/state',
+  'updateHardwareStatus',
   '/api/start',
   '/api/stop',
   '/api/config/dome',
