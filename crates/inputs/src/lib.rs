@@ -6,6 +6,6 @@ pub mod midi;
 pub mod orientation;
 
 pub use audio::VolumeReplay;
-pub use madmom::parse_beat_line;
+pub use madmom::{parse_beat_line, MadmomLaunchConfig, MadmomSidecar};
 pub use midi::{MidiCommand, MidiCommandKind, MidiReplay};
 pub use orientation::{classify_datagram, DatagramKind};
