@@ -8,7 +8,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use domers_core::{DomersConfig, EngineConfig};
+use domers_core::DomersConfig;
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:3000";
 const DEFAULT_CONFIG_PATH: &str = "examples/domers.toml";
@@ -24,12 +24,11 @@ async fn main() {
 async fn run() -> Result<(), Box<dyn Error>> {
     let options = Options::parse(env::args().skip(1))?;
     let config = load_config(&options.config_path)?;
-    let engine_config = EngineConfig::from(&config);
 
     println!("Domers listening on http://{}", options.bind_addr);
     println!("Loaded config from {}", options.config_path.display());
 
-    domers_server::serve(options.bind_addr, engine_config).await?;
+    domers_server::serve(options.bind_addr, config).await?;
     Ok(())
 }
 

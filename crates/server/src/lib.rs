@@ -12,9 +12,14 @@ use axum::{
     routing::{get, patch, post},
     Json, Router,
 };
-use domers_core::{ColorPalette, EngineConfig, PaletteEntry};
-use domers_outputs::DomeCommand;
-use domers_visualizers::{render_dome_visualizer, LiveVisualizer, VisualizerInput};
+use domers_core::{ColorPalette, DomersConfig, EngineConfig, PaletteEntry};
+use domers_engine::{schedule_operator_frame, FullVisualizerSpec, InputSpec, OutputSpec};
+use domers_outputs::{BarCommand, DomeCommand, StageCommand};
+use domers_visualizers::{
+    render_bar_diagnostic, render_dome_diagnostic, render_dome_visualizer, render_stage_visualizer,
+    BarDiagnosticVisualizer, DiagnosticInput, DomeDiagnosticVisualizer, LiveVisualizer,
+    StageVisualizer, VisualizerInput,
+};
 use serde::{Deserialize, Serialize};
 use tokio::{
     net::TcpListener,
@@ -64,6 +69,23 @@ pub struct SimulatorFrame {
     pub metrics: Metrics,
     /// Dome simulator commands for the frame.
     pub commands: Vec<SimulatorCommand>,
+}
+
+/// Full operator frame produced by the runtime scheduler.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OperatorCommandFrame {
+    /// Active input names selected for update.
+    pub active_inputs: Vec<&'static str>,
+    /// Active visualizer names selected for update.
+    pub active_visualizers: Vec<&'static str>,
+    /// Active output names selected for update.
+    pub active_outputs: Vec<&'static str>,
+    /// Dome command stream for this frame.
+    pub dome: Vec<DomeCommand>,
+    /// Bar command stream for this frame.
+    pub bar: Vec<BarCommand>,
+    /// Stage command stream for this frame.
+    pub stage: Vec<StageCommand>,
 }
 
 /// Browser-facing simulator command.
@@ -131,7 +153,7 @@ impl SimulatorControls {
 /// In-process server state shared by HTTP handlers and the engine task.
 #[derive(Clone, Debug, Default)]
 pub struct ServerState {
-    config: EngineConfig,
+    config: DomersConfig,
     simulator: SimulatorControls,
     metrics: Metrics,
     running: bool,
@@ -140,7 +162,7 @@ pub struct ServerState {
 impl ServerState {
     /// Create server state from an engine config.
     #[must_use]
-    pub const fn new(config: EngineConfig) -> Self {
+    pub fn new(config: DomersConfig) -> Self {
         Self {
             config,
             simulator: SimulatorControls {
@@ -159,16 +181,22 @@ impl ServerState {
     /// Return a config snapshot.
     #[must_use]
     pub fn config(&self) -> EngineConfig {
+        EngineConfig::from(&self.config)
+    }
+
+    /// Return a full config snapshot.
+    #[must_use]
+    pub fn full_config(&self) -> DomersConfig {
         self.config.clone()
     }
 
     /// Patch dome runtime configuration.
     pub fn patch_dome_config(&mut self, patch: DomeConfigPatch) {
         if let Some(active_visualizer) = patch.active_visualizer {
-            self.config.dome_active_vis = active_visualizer;
+            self.config.dome.active_visualizer = active_visualizer;
         }
         if let Some(flash_speed) = patch.flash_speed {
-            self.config.flash_speed = flash_speed.clamp(0.0, 32.0);
+            self.config.tempo.flash_speed = flash_speed.clamp(0.0, 32.0);
         }
         if let Some(color_palette_index) = patch.color_palette_index {
             self.config.color_palette_index = color_palette_index.min(7);
@@ -239,8 +267,13 @@ impl ServerState {
     pub fn simulator_frame(&mut self) -> Vec<DomeCommand> {
         self.metrics.frames = self.metrics.frames.saturating_add(1);
         self.metrics.simulator_frames = self.metrics.simulator_frames.saturating_add(1);
-        let visualizer = visualizer_from_index(self.config.dome_active_vis);
-        render_dome_visualizer(visualizer, self.simulator.visualizer_input(&self.config))
+        self.operator_frame().dome
+    }
+
+    /// Produce one scheduled operator frame for all outputs.
+    #[must_use]
+    pub fn operator_frame(&self) -> OperatorCommandFrame {
+        render_operator_frame(&self.config, self.simulator)
     }
 
     /// Return a serializable snapshot.
@@ -248,7 +281,7 @@ impl ServerState {
     pub fn snapshot(&self) -> ServerSnapshot {
         ServerSnapshot {
             running: self.running,
-            config: self.config.clone(),
+            config: EngineConfig::from(&self.config),
             metrics: self.metrics,
             simulator: self.simulator,
         }
@@ -265,14 +298,14 @@ pub struct AppRuntime {
 
 impl Default for AppRuntime {
     fn default() -> Self {
-        Self::new(EngineConfig::default())
+        Self::new(DomersConfig::default())
     }
 }
 
 impl AppRuntime {
     /// Create a runtime from an engine config.
     #[must_use]
-    pub fn new(config: EngineConfig) -> Self {
+    pub fn new(config: DomersConfig) -> Self {
         let (frames, _) = broadcast::channel(32);
         Self {
             state: Arc::new(Mutex::new(ServerState::new(config))),
@@ -423,7 +456,7 @@ impl AppRuntime {
 /// # Errors
 ///
 /// Returns an error if the TCP listener cannot bind or the HTTP server fails.
-pub async fn serve(addr: SocketAddr, config: EngineConfig) -> std::io::Result<()> {
+pub async fn serve(addr: SocketAddr, config: DomersConfig) -> std::io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
     serve_listener(listener, config).await
 }
@@ -433,7 +466,7 @@ pub async fn serve(addr: SocketAddr, config: EngineConfig) -> std::io::Result<()
 /// # Errors
 ///
 /// Returns an error if the HTTP server fails.
-pub async fn serve_listener(listener: TcpListener, config: EngineConfig) -> std::io::Result<()> {
+pub async fn serve_listener(listener: TcpListener, config: DomersConfig) -> std::io::Result<()> {
     axum::serve(listener, AppRuntime::new(config).router()).await
 }
 
@@ -630,6 +663,287 @@ fn serialize_commands(commands: Vec<DomeCommand>) -> Vec<SimulatorCommand> {
         .collect()
 }
 
+fn render_operator_frame(
+    config: &DomersConfig,
+    simulator: SimulatorControls,
+) -> OperatorCommandFrame {
+    let engine = EngineConfig::from(config);
+    let inputs = input_specs(simulator);
+    let outputs = output_specs(config);
+    let schedule = schedule_operator_frame(&inputs, &outputs);
+    let visualizer_input = simulator.visualizer_input(&engine);
+    let diagnostic_input = DiagnosticInput {
+        state: 1,
+        step: 0,
+        brightness: brightness_f32(config.dome.brightness),
+        volume: simulator.volume,
+        beat_progress: simulator.beat_progress,
+    };
+
+    let mut frame = OperatorCommandFrame {
+        active_inputs: schedule.active_inputs,
+        active_visualizers: schedule.active_visualizers.clone(),
+        active_outputs: schedule.active_outputs,
+        ..OperatorCommandFrame::default()
+    };
+
+    for visualizer in &schedule.active_visualizers {
+        render_scheduled_visualizer(
+            visualizer,
+            config,
+            diagnostic_input,
+            visualizer_input,
+            &mut frame,
+        );
+    }
+
+    frame
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "This dispatch table keeps Spectrum visualizer names explicit at the runtime boundary"
+)]
+fn render_scheduled_visualizer(
+    visualizer: &str,
+    config: &DomersConfig,
+    diagnostic_input: DiagnosticInput,
+    visualizer_input: VisualizerInput,
+    frame: &mut OperatorCommandFrame,
+) {
+    match visualizer {
+        "LEDDomeVolumeVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::Volume,
+            visualizer_input,
+        )),
+        "LEDDomeRadialVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::Radial,
+            visualizer_input,
+        )),
+        "LEDDomeRaceVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::Race,
+            visualizer_input,
+        )),
+        "LEDDomeSnakesVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::Snakes,
+            visualizer_input,
+        )),
+        "LEDDomeSplatVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::Splat,
+            visualizer_input,
+        )),
+        "LEDDomeQuaternionTestVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::QuaternionTest,
+            visualizer_input,
+        )),
+        "LEDDomeQuaternionMultiTestVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::QuaternionMultiTest,
+            visualizer_input,
+        )),
+        "LEDDomeQuaternionPaintbrushVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::QuaternionPaintbrush,
+            visualizer_input,
+        )),
+        "LEDDomeFlashVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::Flash,
+            visualizer_input,
+        )),
+        "LEDDomeTVStaticVisualizer" => frame.dome.extend(render_dome_visualizer(
+            LiveVisualizer::TvStatic,
+            visualizer_input,
+        )),
+        "LEDDomeFlashColorsDiagnosticVisualizer" => frame.dome.extend(render_dome_diagnostic(
+            DomeDiagnosticVisualizer::FlashColors,
+            diagnostic_input,
+        )),
+        "LEDDomeStrutIterationDiagnosticVisualizer" => {
+            frame.dome.extend(render_dome_diagnostic(
+                DomeDiagnosticVisualizer::StrutIteration,
+                diagnostic_input,
+            ));
+        }
+        "LEDDomeStrandTestDiagnosticVisualizer" => frame.dome.extend(render_dome_diagnostic(
+            DomeDiagnosticVisualizer::StrandTest,
+            diagnostic_input,
+        )),
+        "LEDDomeFullColorFlashDiagnosticVisualizer" => frame.dome.extend(render_dome_diagnostic(
+            DomeDiagnosticVisualizer::FullColorFlash,
+            diagnostic_input,
+        )),
+        "LEDBarFlashColorsDiagnosticVisualizer" => frame.bar.extend(render_bar_diagnostic(
+            BarDiagnosticVisualizer::FlashColors,
+            DiagnosticInput {
+                brightness: brightness_f32(config.bar.brightness),
+                ..diagnostic_input
+            },
+            config.bar.infinity_width as usize,
+            config.bar.infinity_length as usize,
+            config.bar.runner_length as usize,
+        )),
+        "LEDStageFlashColorsDiagnosticVisualizer" => frame.stage.extend(render_stage_visualizer(
+            StageVisualizer::FlashColorsDiagnostic,
+            DiagnosticInput {
+                brightness: brightness_f32(config.stage.brightness),
+                ..diagnostic_input
+            },
+            &stage_side_lengths(config),
+        )),
+        "LEDStageDepthLevelVisualizer" => frame.stage.extend(render_stage_visualizer(
+            StageVisualizer::DepthLevel,
+            DiagnosticInput {
+                brightness: brightness_f32(config.stage.brightness),
+                ..diagnostic_input
+            },
+            &stage_side_lengths(config),
+        )),
+        _ => {}
+    }
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "Brightness is user/config bounded and visualizer inputs use f32 channels"
+)]
+fn brightness_f32(brightness: f64) -> f32 {
+    brightness.clamp(0.0, 1.0) as f32
+}
+
+fn input_specs(simulator: SimulatorControls) -> [InputSpec; 3] {
+    [
+        InputSpec {
+            name: "audio",
+            enabled: true,
+            always_active: true,
+        },
+        InputSpec {
+            name: "midi",
+            enabled: simulator.flash_active,
+            always_active: false,
+        },
+        InputSpec {
+            name: "orientation",
+            enabled: true,
+            always_active: true,
+        },
+    ]
+}
+
+fn output_specs(config: &DomersConfig) -> [OutputSpec; 3] {
+    [
+        OutputSpec {
+            name: "dome",
+            enabled: config.dome.enabled || config.dome.simulation_enabled,
+            visualizers: dome_visualizers(config),
+        },
+        OutputSpec {
+            name: "bar",
+            enabled: config.bar.enabled || config.bar.simulation_enabled,
+            visualizers: bar_visualizers(config),
+        },
+        OutputSpec {
+            name: "stage",
+            enabled: config.stage.enabled || config.stage.simulation_enabled,
+            visualizers: stage_visualizers(config),
+        },
+    ]
+}
+
+fn dome_visualizers(config: &DomersConfig) -> Vec<FullVisualizerSpec> {
+    let mut visualizers = vec![
+        FullVisualizerSpec {
+            name: active_dome_visualizer_name(config.dome.active_visualizer),
+            priority: 2,
+            inputs: active_dome_visualizer_inputs(config.dome.active_visualizer),
+        },
+        FullVisualizerSpec {
+            name: "LEDDomeFlashVisualizer",
+            priority: 2,
+            inputs: &["audio", "midi"],
+        },
+        FullVisualizerSpec {
+            name: "LEDDomeTVStaticVisualizer",
+            priority: 1,
+            inputs: &[],
+        },
+    ];
+    if let Some(name) = dome_diagnostic_name(config.dome.test_pattern) {
+        visualizers.push(FullVisualizerSpec {
+            name,
+            priority: 1000,
+            inputs: &[],
+        });
+    }
+    visualizers
+}
+
+fn bar_visualizers(config: &DomersConfig) -> Vec<FullVisualizerSpec> {
+    if config.bar.test_pattern == 1 {
+        vec![FullVisualizerSpec {
+            name: "LEDBarFlashColorsDiagnosticVisualizer",
+            priority: 1000,
+            inputs: &[],
+        }]
+    } else {
+        Vec::new()
+    }
+}
+
+fn stage_visualizers(config: &DomersConfig) -> Vec<FullVisualizerSpec> {
+    let mut visualizers = vec![FullVisualizerSpec {
+        name: "LEDStageDepthLevelVisualizer",
+        priority: 3,
+        inputs: &["audio"],
+    }];
+    if config.stage.test_pattern == 1 {
+        visualizers.push(FullVisualizerSpec {
+            name: "LEDStageFlashColorsDiagnosticVisualizer",
+            priority: 1000,
+            inputs: &[],
+        });
+    }
+    visualizers
+}
+
+fn active_dome_visualizer_name(index: u8) -> &'static str {
+    match index {
+        1 => "LEDDomeRadialVisualizer",
+        2 => "LEDDomeRaceVisualizer",
+        3 => "LEDDomeSnakesVisualizer",
+        4 => "LEDDomeQuaternionTestVisualizer",
+        5 => "LEDDomeQuaternionMultiTestVisualizer",
+        6 => "LEDDomeQuaternionPaintbrushVisualizer",
+        7 => "LEDDomeSplatVisualizer",
+        _ => "LEDDomeVolumeVisualizer",
+    }
+}
+
+fn active_dome_visualizer_inputs(index: u8) -> &'static [&'static str] {
+    match index {
+        4 | 5 => &["orientation"],
+        6 => &["audio", "orientation"],
+        _ => &["audio"],
+    }
+}
+
+fn dome_diagnostic_name(test_pattern: u8) -> Option<&'static str> {
+    match test_pattern {
+        1 => Some("LEDDomeFlashColorsDiagnosticVisualizer"),
+        2 => Some("LEDDomeStrutIterationDiagnosticVisualizer"),
+        3 => Some("LEDDomeStrandTestDiagnosticVisualizer"),
+        4 => Some("LEDDomeFullColorFlashDiagnosticVisualizer"),
+        _ => None,
+    }
+}
+
+fn stage_side_lengths(config: &DomersConfig) -> Vec<usize> {
+    config
+        .stage
+        .side_lengths
+        .iter()
+        .map(|length| *length as usize)
+        .collect()
+}
+
 const fn visualizer_from_index(index: u8) -> LiveVisualizer {
     match index {
         1 => LiveVisualizer::Radial,
@@ -651,7 +965,7 @@ mod tests {
         time::Duration,
     };
 
-    use domers_core::{EngineConfig, PaletteEntry};
+    use domers_core::{DomersConfig, PaletteEntry};
     use domers_outputs::DomeCommand;
     use tokio::net::TcpListener;
     use tokio::time;
@@ -684,6 +998,52 @@ mod tests {
             .any(|command| matches!(command, DomeCommand::Frame(_))));
         assert_eq!(state.metrics().frames, 1);
         assert_eq!(state.metrics().simulator_frames, 1);
+    }
+
+    #[test]
+    fn operator_frame_schedules_flash_overlay_and_all_output_streams() {
+        let mut config = DomersConfig::default();
+        config.dome.simulation_enabled = true;
+        config.bar.simulation_enabled = true;
+        config.bar.test_pattern = 1;
+        config.stage.simulation_enabled = true;
+        config.stage.side_lengths = vec![3, 4, 5];
+        let state = ServerState::new(config);
+
+        let frame = state.operator_frame();
+
+        assert_eq!(frame.active_outputs, vec!["dome", "bar", "stage"]);
+        assert!(frame
+            .active_visualizers
+            .contains(&"LEDDomeVolumeVisualizer"));
+        assert!(frame.active_visualizers.contains(&"LEDDomeFlashVisualizer"));
+        assert!(frame
+            .active_visualizers
+            .contains(&"LEDBarFlashColorsDiagnosticVisualizer"));
+        assert!(frame
+            .active_visualizers
+            .contains(&"LEDStageDepthLevelVisualizer"));
+        assert!(!frame.dome.is_empty());
+        assert!(!frame.bar.is_empty());
+        assert!(!frame.stage.is_empty());
+    }
+
+    #[test]
+    fn operator_frame_diagnostics_override_active_dome_visualizer() {
+        let mut config = DomersConfig::default();
+        config.dome.test_pattern = 2;
+        let state = ServerState::new(config);
+
+        let frame = state.operator_frame();
+
+        assert_eq!(
+            frame.active_visualizers,
+            vec!["LEDDomeStrutIterationDiagnosticVisualizer"]
+        );
+        assert!(frame
+            .dome
+            .iter()
+            .any(|command| matches!(command, DomeCommand::Frame(_))));
     }
 
     #[test]
@@ -807,7 +1167,7 @@ mod tests {
             .expect("listener binds");
         let addr = listener.local_addr().expect("listener has local address");
         let server = tokio::spawn(async move {
-            serve_listener(listener, EngineConfig::default())
+            serve_listener(listener, DomersConfig::default())
                 .await
                 .expect("server runs");
         });

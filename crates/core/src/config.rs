@@ -38,6 +38,9 @@ pub struct DomersConfig {
     /// Spectrum-compatible runtime color palette.
     #[serde(default)]
     pub color_palette: ColorPalette,
+    /// Active color palette slot, matching Spectrum's `colorPaletteIndex`.
+    #[serde(default)]
+    pub color_palette_index: u8,
     /// Madmom sidecar config.
     pub madmom: MadmomConfig,
 }
@@ -181,6 +184,7 @@ impl Default for DomersConfig {
                 flash_speed: 0.0,
             },
             color_palette: ColorPalette::default(),
+            color_palette_index: 0,
             madmom: MadmomConfig {
                 command: "DBNBeatTracker".to_string(),
                 audio_input_index: None,
@@ -196,7 +200,7 @@ impl From<&DomersConfig> for EngineConfig {
             dome_simulation_enabled: config.dome.simulation_enabled,
             dome_active_vis: config.dome.active_visualizer,
             dome_test_pattern: config.dome.test_pattern,
-            color_palette_index: 0,
+            color_palette_index: config.color_palette_index,
             flash_speed: config.tempo.flash_speed,
             color_palette: config.color_palette.clone(),
         }

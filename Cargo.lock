@@ -164,6 +164,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "domers-core",
+ "domers-engine",
  "domers-outputs",
  "domers-visualizers",
  "serde",
