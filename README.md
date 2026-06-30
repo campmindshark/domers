@@ -1,6 +1,6 @@
 # Domers
 
-Rust rewrite of Camp Mindshark Spectrum lighting control.
+Rust port of [Spectrum](https://github.com/campmindshark/spectrum).
 
 ## Status
 

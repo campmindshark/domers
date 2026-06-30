@@ -59,10 +59,15 @@ for (const marker of [
   '/api/start',
   '/api/stop',
   '/api/config/dome',
+  '/api/dome/geometry',
+  '/api/dome/mapping',
   '/api/simulator',
   '/api/simulator/frame',
   '/ws/simulator',
   'command.kind === \'pixel\'',
+  'buildDomeLedPoints',
+  'domeStrutLedCounts',
+  'function drawLed',
 ]) {
   if (!js.includes(marker)) {
     console.error(`Missing required API marker: ${marker}`);

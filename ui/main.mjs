@@ -16,6 +16,7 @@ const metricFrames = document.querySelector('#metric-frames');
 const metricSimulatorFrames = document.querySelector('#metric-simulator-frames');
 const canvas = document.querySelector('#dome-simulator');
 const context = canvas?.getContext('2d');
+let domeLedPoints = [];
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -26,6 +27,14 @@ async function request(path, options = {}) {
     throw new Error(`${path} failed with ${response.status}`);
   }
   return response.json();
+}
+
+async function loadDomeLayout() {
+  const [geometry, mapping] = await Promise.all([
+    request('/api/dome/geometry'),
+    request('/api/dome/mapping'),
+  ]);
+  domeLedPoints = buildDomeLedPoints(geometry, mapping);
 }
 
 function updateSnapshot(snapshot) {
@@ -65,15 +74,12 @@ function drawFrame(colors) {
     return;
   }
 
-  const cellCount = Math.ceil(Math.sqrt(colors.length));
-  const cellSize = canvas.width / cellCount;
-  context.clearRect(0, 0, canvas.width, canvas.height);
+  clearCanvas();
+  context.lineWidth = 1;
 
   colors.forEach((color, index) => {
-    const x = (index % cellCount) * cellSize;
-    const y = Math.floor(index / cellCount) * cellSize;
-    context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
-    context.fillRect(x, y, Math.ceil(cellSize), Math.ceil(cellSize));
+    const point = domeLedPoints[index] ?? fallbackDomePoint(index, colors.length);
+    drawLed(point.x, point.y, color, point.size);
   });
 }
 
@@ -82,15 +88,68 @@ function drawPixel(command) {
     return;
   }
 
-  const columns = 20;
-  const cellSize = canvas.width / columns;
   const index = command.strut_index * 3 + command.led_index;
-  const x = (index % columns) * cellSize + cellSize / 2;
-  const y = Math.floor(index / columns) * cellSize + cellSize / 2;
-  context.fillStyle = toColorInput(command.color);
-  context.beginPath();
-  context.arc(x, y, Math.max(5, cellSize * 0.3), 0, Math.PI * 2);
-  context.fill();
+  const point = domeLedPoints[index] ?? fallbackDomePoint(index, 190);
+  drawLed(point.x, point.y, command.color, point.size * 2);
+}
+
+function drawLed(x, y, color, radius) {
+  context.fillStyle = toColorInput(color);
+  const size = Math.max(1, radius);
+  context.fillRect(Math.round(x), Math.round(y), size, size);
+}
+
+function fallbackDomePoint(index, total) {
+  const center = canvas.width / 2;
+  const maxRadius = canvas.width * 0.46;
+  const normalized = total <= 1 ? 0 : index / (total - 1);
+  const ring = Math.floor(normalized * 7);
+  const ringStart = ring / 7;
+  const ringEnd = (ring + 1) / 7;
+  const inRing = (normalized - ringStart) / Math.max(0.001, ringEnd - ringStart);
+  const angle = inRing * Math.PI * 2 + ring * 0.43;
+  const radius = maxRadius * Math.sqrt((ring + 0.45) / 7);
+
+  return {
+    x: center + Math.cos(angle) * radius,
+    y: center + Math.sin(angle) * radius,
+    size: Math.max(4, canvas.width / 95),
+  };
+}
+
+function buildDomeLedPoints(geometry, mapping) {
+  const ledCounts = domeStrutLedCounts(mapping);
+  const points = [];
+
+  for (let strut = 0; strut < geometry.lines.length; strut += 1) {
+    const line = geometry.lines[strut];
+    const start = geometry.hand_drawn_points[line.start];
+    const end = geometry.hand_drawn_points[line.end];
+    const leds = ledCounts[strut] ?? 0;
+    for (let led = 0; led < leds; led += 1) {
+      const d = (led + 1) / (leds + 2);
+      points.push({
+        x: 10 + ((end.normalized_x - start.normalized_x) * d + start.normalized_x) * 690,
+        y: 10 + ((end.normalized_y - start.normalized_y) * d + start.normalized_y) * 690,
+        size: 1,
+      });
+    }
+  }
+
+  return points;
+}
+
+function domeStrutLedCounts(mapping) {
+  return mapping.strut_positions.map(position => {
+    let strutsLeft = position.control_box_strut_index;
+    let strand = 0;
+    while (mapping.control_box_strut_order[strand].length <= strutsLeft) {
+      strutsLeft -= mapping.control_box_strut_order[strand].length;
+      strand += 1;
+    }
+    const strutType = mapping.control_box_strut_order[strand][strutsLeft];
+    return mapping.strut_lengths[strutType];
+  });
 }
 
 function handleSimulatorFrame(frame) {
@@ -187,5 +246,6 @@ for (const input of [
   });
 }
 
+await loadDomeLayout();
 await refreshState();
 connectSimulatorStream();

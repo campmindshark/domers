@@ -294,6 +294,8 @@ impl AppRuntime {
             .route("/api/start", post(start_engine))
             .route("/api/stop", post(stop_engine))
             .route("/api/config/dome", patch(patch_dome_config))
+            .route("/api/dome/geometry", get(dome_geometry))
+            .route("/api/dome/mapping", get(dome_mapping))
             .route("/api/simulator", patch(patch_simulator_controls))
             .route("/api/simulator/frame", get(simulator_preview_frame))
             .route("/ws/simulator", get(simulator_websocket))
@@ -451,6 +453,24 @@ async fn main_js() -> impl IntoResponse {
 
 async fn health_json() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "status": health() }))
+}
+
+async fn dome_geometry() -> Json<serde_json::Value> {
+    Json(
+        serde_json::from_str(include_str!(
+            "../../../fixtures/spectrum-csharp/dome_geometry.json"
+        ))
+        .expect("dome geometry fixture is valid JSON"),
+    )
+}
+
+async fn dome_mapping() -> Json<serde_json::Value> {
+    Json(
+        serde_json::from_str(include_str!(
+            "../../../fixtures/spectrum-csharp/dome_mapping.json"
+        ))
+        .expect("dome mapping fixture is valid JSON"),
+    )
 }
 
 async fn get_state(State(runtime): State<AppRuntime>) -> Json<ServerSnapshot> {
@@ -655,6 +675,20 @@ mod tests {
         )
         .await;
         assert!(started.contains("\"running\":true"));
+
+        let geometry = http_request(
+            addr,
+            "GET /api/dome/geometry HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+        )
+        .await;
+        assert!(geometry.contains("\"line_count\":190"));
+
+        let mapping = http_request(
+            addr,
+            "GET /api/dome/mapping HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+        )
+        .await;
+        assert!(mapping.contains("\"strut_count\":190"));
 
         server.abort();
     }
