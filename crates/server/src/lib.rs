@@ -1,6 +1,12 @@
 //! Runnable Domers server contract and HTTP/WebSocket adapter.
 
-use std::{collections::VecDeque, net::SocketAddr, process::Stdio, sync::Arc, time::Duration};
+use std::{
+    collections::VecDeque,
+    net::SocketAddr,
+    process::Stdio,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use axum::{
     extract::{
@@ -387,13 +393,20 @@ impl SimulatorControls {
 }
 
 /// In-process server state shared by HTTP handlers and the engine task.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ServerState {
     config: DomersConfig,
     simulator: SimulatorControls,
     inputs: InputRuntime,
     metrics: Metrics,
     running: bool,
+    input_epoch: Instant,
+}
+
+impl Default for ServerState {
+    fn default() -> Self {
+        Self::new(DomersConfig::default())
+    }
 }
 
 impl ServerState {
@@ -413,6 +426,7 @@ impl ServerState {
                 simulator_frames: 0,
             },
             running: false,
+            input_epoch: Instant::now(),
         }
     }
 
@@ -532,8 +546,16 @@ impl ServerState {
 
     /// Record a human tap-tempo event at the current runtime timestamp.
     pub fn tap_tempo(&mut self) {
+        self.tap_tempo_at(self.input_now_ms());
+    }
+
+    /// Record a human tap-tempo event at a known timestamp.
+    ///
+    /// This keeps runtime taps on wall-clock time while preserving deterministic
+    /// tests and fixture inputs that need explicit timestamps.
+    pub fn tap_tempo_at(&mut self, timestamp_ms: u64) {
         self.inputs.taps = self.inputs.taps.saturating_add(1);
-        self.inputs.beat.add_tap(self.now_ms());
+        self.inputs.beat.add_tap(timestamp_ms);
     }
 
     /// Reset tempo state.
@@ -805,6 +827,17 @@ impl ServerState {
 
     fn now_ms(&self) -> u64 {
         self.metrics.frames.saturating_mul(2_500) / 1_000
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "Input uptime only needs millisecond precision for a single server process"
+    )]
+    fn input_now_ms(&self) -> u64 {
+        self.input_epoch
+            .elapsed()
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64
     }
 
     fn prune_input_state(&mut self) {
@@ -2913,6 +2946,33 @@ mod tests {
         assert!((snapshot.simulator.volume - 0.25).abs() < f32::EPSILON);
         assert!((snapshot.simulator.beat_progress - 0.75).abs() < f64::EPSILON);
         assert!(!snapshot.simulator.flash_active);
+    }
+
+    #[test]
+    fn tap_tempo_uses_wall_clock_instead_of_engine_frame_time() {
+        let mut state = ServerState::default();
+
+        state.tap_tempo();
+        for _ in 0..400 {
+            state.engine_frame();
+        }
+        std::thread::sleep(Duration::from_millis(120));
+        state.tap_tempo();
+        for _ in 0..400 {
+            state.engine_frame();
+        }
+        std::thread::sleep(Duration::from_millis(120));
+        state.tap_tempo();
+
+        let beat_ms = state
+            .snapshot()
+            .inputs
+            .beat_ms
+            .expect("three taps should set tempo");
+        assert!(
+            (90..=180).contains(&beat_ms),
+            "tap tempo used {beat_ms}ms instead of the real click interval"
+        );
     }
 
     #[test]
