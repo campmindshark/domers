@@ -158,6 +158,8 @@ for (const marker of [
   'overflow: auto',
   '.slider-number-field',
   '.side-lengths-grid',
+  '.palette-color-input',
+  'height: 3rem',
 ]) {
   if (!css.includes(marker) && !app.includes(marker)) {
     console.error(`Missing required shared CSS marker: ${marker}`);
@@ -239,6 +241,8 @@ for (const marker of [
   '/api/input/tempo/reset',
   '/api/input/orientation/calibrate',
   'renderPaletteEditor',
+  "className = 'palette-color-input'",
+  "labelWithText('Color 1', color1, 'palette-color-field')",
   "paletteInput(paletteSlot, colorIndex, 'color2')",
   'color2_enabled',
   'updateInputStatus',

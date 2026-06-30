@@ -608,8 +608,8 @@ function renderPaletteEditor() {
       gradientLabel.append('Gradient ', gradient);
       entry.append(
         title,
-        labelWithText('Color 1', color1),
-        labelWithText('Color 2', color2),
+        labelWithText('Color 1', color1, 'palette-color-field'),
+        labelWithText('Color 2', color2, 'palette-color-field'),
         gradientLabel,
       );
       card.append(entry);
@@ -622,6 +622,7 @@ function renderPaletteEditor() {
 function paletteInput(paletteSlot, colorIndex, role) {
   const input = document.createElement('input');
   input.type = 'color';
+  input.className = 'palette-color-input';
   input.value = '#000000';
   input.id = `palette-${paletteSlot + 1}-color-${colorIndex + 1}-${role}`;
   input.dataset.paletteIndex = String(paletteSlot);
@@ -630,8 +631,11 @@ function paletteInput(paletteSlot, colorIndex, role) {
   return input;
 }
 
-function labelWithText(text, input) {
+function labelWithText(text, input, className = '') {
   const label = document.createElement('label');
+  if (className) {
+    label.className = className;
+  }
   label.append(text, input);
   return label;
 }
