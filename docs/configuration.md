@@ -78,7 +78,7 @@ warning: InertField: domeAutoFlashDelay
 
 ## Madmom Config
 
-Domers keeps the beat sidecar protocol from Spectrum, but not the hard-coded Windows path.
+Madmom remains a managed beat sidecar. For parity, Domers starts it, passes the selected audio input, restarts it when beat/audio settings change, and parses beat lines from stdout.
 
 Old Spectrum behavior:
 
@@ -86,7 +86,7 @@ Old Spectrum behavior:
 Madmom/env/Scripts/python.exe DBNBeatTracker --host_api --audio_input=<index> online
 ```
 
-Domers behavior:
+Domers config:
 
 ```toml
 [madmom]
@@ -94,11 +94,13 @@ command = "DBNBeatTracker"
 audio_input_index = 0
 ```
 
-The command can point at a Python wrapper, a virtualenv executable, a script, or a native replacement. The stable contract is stdout lines shaped like:
+The command can point at a bundled Python environment, a wrapper script, a system install, a Docker sidecar launcher, or a native replacement. The stable runtime contract is stdout lines shaped like:
 
 ```text
 BEAT:12.345
 ```
+
+Bundling Madmom is a release packaging choice, not a runtime path assumption. A packaged Domers build should include either a working Madmom distribution or a documented one-command installer so operators do not have to assemble the beat tracker by hand.
 
 See [`intentional-deviations.md`](intentional-deviations.md) for the rationale.
 

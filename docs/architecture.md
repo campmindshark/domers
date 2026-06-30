@@ -67,7 +67,7 @@ Domers-native configuration is TOML. Runtime code loads TOML, not XML. Legacy Sp
 
 ## Beat Input
 
-The beat engine accepts beat events from tap tempo, fake tests, and the configurable Madmom-compatible sidecar protocol. The architecture depends on beat events, not on a specific Python installation path.
+The beat engine accepts beat events from tap tempo, fake tests, and the Madmom-compatible sidecar. Domers owns sidecar lifecycle and consumes beat events; packaging decides whether the sidecar is a bundled Python environment, wrapper script, system install, Docker launcher, or native replacement.
 
 ## Intentional Deviations
 

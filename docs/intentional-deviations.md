@@ -16,15 +16,15 @@ cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml
 
 **Validation:** `domers-core` tests TOML round-trip behavior and XML import warnings. `tests/integration/config_cli.rs` verifies the CLI writes TOML.
 
-## Madmom Sidecar Path
+## Madmom Sidecar Packaging
 
 **Spectrum:** The Windows app searches upward from the assembly for `Madmom/env/Scripts/python.exe`, starts `DBNBeatTracker --host_api --audio_input=<index> online`, and parses `BEAT:{seconds}` stdout lines.
 
-**Domers:** The beat protocol remains `BEAT:{seconds}`, but the command/path is configured in TOML under `[madmom]`. Domers does not assume the Windows virtualenv layout.
+**Domers:** The beat protocol remains `BEAT:{seconds}` and Domers still owns sidecar lifecycle. The packaging is more flexible: the configured command can point at a bundled Python environment, wrapper script, system install, Docker launcher, or native replacement.
 
-**Reason:** Keeping the stdout protocol preserves compatibility with Python Madmom or a wrapper script, while leaving room for a native Rust beat detector.
+**Reason:** The old virtualenv path is a Windows packaging detail, not the feature. The feature is managed beat tracking: start with the selected audio input, restart on relevant config changes, parse beat timestamps, and feed the beat engine.
 
-**Validation:** `domers-inputs` parses valid and malformed `BEAT:` lines; `domers-core` tests Madmom beat timing windows.
+**Validation:** `domers-inputs` parses valid and malformed `BEAT:` lines; `domers-core` tests Madmom beat timing windows. Full parity also needs sidecar process lifecycle tests.
 
 ## Browser Simulator Source
 

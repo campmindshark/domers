@@ -73,7 +73,7 @@ Intentional differences from Spectrum are tracked in
 
 ## Madmom
 
-The old Windows app searched for a bundled Python 3.7 virtualenv at `Madmom/env/Scripts/python.exe` and spawned `DBNBeatTracker`, then parsed `BEAT:{seconds}` lines from stdout. Domers preserves that sidecar protocol for compatibility, but the command/path is config-driven in TOML instead of being hard-coded to the Windows bundle. A native Rust beat tracker can use the same beat input contract later.
+Spectrum managed Madmom for the operator: it found the bundled tracker, started it with the selected audio device, restarted it when beat/audio settings changed, and parsed `BEAT:{seconds}` lines from stdout. Domers needs the same managed sidecar behavior, without baking in the old Windows virtualenv path. The release can ship Madmom as a Python environment, wrapper script, Docker sidecar, or native package; the runtime contract stays the same beat-event stream.
 
 ## UI
 
