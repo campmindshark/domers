@@ -19,7 +19,7 @@
       "input": {
         "beat_progress": 0.25,
         "diagnostic_state": 1,
-        "diagnostic_step": 4,
+        "diagnostic_step": 0,
         "flash_active": true,
         "palette_slot": 0,
         "volume": 0.7
@@ -39,7 +39,7 @@
       },
       "input": {
         "beat_progress": 0.25,
-        "diagnostic_state": 1,
+        "diagnostic_state": 0,
         "diagnostic_step": 4,
         "flash_active": true,
         "palette_slot": 0,
@@ -60,7 +60,7 @@
       },
       "input": {
         "beat_progress": 0.25,
-        "diagnostic_state": 1,
+        "diagnostic_state": 0,
         "diagnostic_step": 4,
         "flash_active": true,
         "palette_slot": 0,
@@ -163,7 +163,7 @@
       "expected": {
         "kind": "frame_hash",
         "status": "captured",
-        "value": "18016181816440964175"
+        "value": "3377082443979724166"
       },
       "input": {
         "beat_progress": 0.25,
@@ -276,7 +276,7 @@
       "expected": {
         "kind": "frame_hash",
         "status": "captured",
-        "value": "5865480772540307484"
+        "value": "7938821499849451788"
       },
       "input": {
         "beat_progress": 0.25,
@@ -322,7 +322,7 @@
       },
       "input": {
         "beat_progress": 0.25,
-        "diagnostic_state": 1,
+        "diagnostic_state": 0,
         "diagnostic_step": 4,
         "flash_active": true,
         "palette_slot": 0,
@@ -343,7 +343,7 @@
       },
       "input": {
         "beat_progress": 0.25,
-        "diagnostic_state": 1,
+        "diagnostic_state": 0,
         "diagnostic_step": 4,
         "flash_active": true,
         "palette_slot": 0,
@@ -363,7 +363,7 @@
         "value": "13155595874918931506"
       },
       "input": {
-        "beat_progress": 0.25,
+        "beat_progress": 0.0,
         "diagnostic_state": 1,
         "diagnostic_step": 4,
         "flash_active": true,

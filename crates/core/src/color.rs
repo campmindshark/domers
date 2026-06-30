@@ -174,7 +174,7 @@ impl Rgb {
             reason = "RGB protocol values are clamped before conversion back to u8"
         )]
         fn ch(value: u8, factor: f32) -> u8 {
-            ((f32::from(value) * factor).clamp(0.0, 255.0)).round() as u8
+            (f32::from(value) * factor).clamp(0.0, 255.0) as u8
         }
         Self {
             r: ch(self.r, factor),

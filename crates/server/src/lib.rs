@@ -37,8 +37,9 @@ use domers_outputs::{
 };
 use domers_visualizers::{
     render_bar_diagnostic, render_dome_diagnostic, render_dome_visualizer, render_stage_visualizer,
-    BarDiagnosticVisualizer, DiagnosticInput, DomeDiagnosticVisualizer, LiveVisualizer,
-    StageVisualizer, VisualizerInput,
+    render_stage_visualizer_with_input, BarDiagnosticVisualizer, DiagnosticInput,
+    DomeDiagnosticVisualizer, LiveVisualizer, StageVisualizer, StageVisualizerInput,
+    VisualizerInput,
 };
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native-capture")]
@@ -2548,11 +2549,16 @@ fn render_scheduled_visualizer(
             },
             &stage_side_lengths(config),
         )),
-        "LEDStageDepthLevelVisualizer" => frame.stage.extend(render_stage_visualizer(
+        "LEDStageDepthLevelVisualizer" => frame.stage.extend(render_stage_visualizer_with_input(
             StageVisualizer::DepthLevel,
-            DiagnosticInput {
-                brightness: brightness_f32(config.stage.brightness),
-                ..diagnostic_input
+            StageVisualizerInput {
+                diagnostic: DiagnosticInput {
+                    brightness: brightness_f32(config.stage.brightness),
+                    ..diagnostic_input
+                },
+                color_palette: config.color_palette.clone(),
+                color_palette_index: config.color_palette_index,
+                stage_brightness: brightness_f32(config.stage.brightness),
             },
             &stage_side_lengths(config),
         )),
@@ -2766,7 +2772,8 @@ mod tests {
     async fn wait_for_input_events(runtime: &AppRuntime) -> super::ServerSnapshot {
         for _ in 0..50 {
             let snapshot = runtime.snapshot().await;
-            if snapshot.inputs.audio_adapter.events == 1
+            if snapshot.inputs.volume == Some(0.42)
+                && snapshot.inputs.audio_adapter.events == 1
                 && snapshot.inputs.midi_adapter.events == 1
                 && snapshot.inputs.orientation_adapter.events == 1
             {
@@ -2884,7 +2891,11 @@ mod tests {
         assert!(frame
             .dome
             .iter()
-            .any(|command| matches!(command, DomeCommand::Frame(_))));
+            .any(|command| matches!(command, DomeCommand::Pixel { .. })));
+        assert!(frame
+            .dome
+            .iter()
+            .any(|command| matches!(command, DomeCommand::Flush)));
     }
 
     #[test]

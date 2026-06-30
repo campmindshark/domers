@@ -135,6 +135,14 @@ static object CreateVisualizer(string name, SpectrumConfiguration config, AudioI
     ?? throw new Exception($"Could not instantiate {name}");
 }
 
+static void SeedRandomFields(object visualizer) {
+  foreach (var field in visualizer.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)) {
+    if (field.FieldType == typeof(Random)) {
+      field.SetValue(visualizer, new Random(0));
+    }
+  }
+}
+
 static void ConfigureCase(SpectrumConfiguration config, CaptureCase testCase) {
   config.colorPaletteIndex = testCase.Input.PaletteSlot;
   config.domeTestPattern = 0;
@@ -229,10 +237,15 @@ static void HashBarCommands(ref ulong hash, SpectrumConfiguration config) {
   }
 }
 
-static void HashStageCommands(ref ulong hash, SpectrumConfiguration config) {
+static void HashStageCommands(ref ulong hash, SpectrumConfiguration config, bool traceStage) {
+  int traceCount = 0;
   while (config.stageCommandQueue.TryDequeue(out var command)) {
     HashByte(ref hash, command.isFlush ? (byte)0 : (byte)2);
     if (!command.isFlush) {
+      if (traceStage && traceCount < 24) {
+        Console.Error.WriteLine($"stage[{traceCount}] side={command.sideIndex} led={command.ledIndex} layer={command.layerIndex} color={command.color}");
+      }
+      traceCount++;
       HashUsize(ref hash, command.sideIndex);
       HashUsize(ref hash, command.ledIndex);
       HashUsize(ref hash, command.layerIndex);
@@ -251,6 +264,7 @@ static string CaptureHash(SpectrumConfiguration config, CaptureCase testCase) {
   var bar = new LEDBarOutput(config);
   var stage = new LEDStageOutput(config);
   var visualizer = CreateVisualizer(testCase.Name, config, audio, midi, orientation, dome, bar, stage);
+  SeedRandomFields(visualizer);
   ((Visualizer)visualizer).Enabled = true;
   DrainQueues(config);
   ((Visualizer)visualizer).Visualize();
@@ -266,7 +280,7 @@ static string CaptureHash(SpectrumConfiguration config, CaptureCase testCase) {
     DrainQueues(config);
   }
   HashBarCommands(ref hash, config);
-  HashStageCommands(ref hash, config);
+  HashStageCommands(ref hash, config, Environment.GetEnvironmentVariable("DOMERS_TRACE_STAGE") == testCase.Case);
   return hash.ToString();
 }
 
@@ -329,6 +343,7 @@ def run_capture() -> dict[str, object]:
         )
         command = (
             "$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'; "
+            f"$env:DOMERS_TRACE_STAGE = {build_spectrum_csharp.quote_ps(env.get('DOMERS_TRACE_STAGE', ''))}; "
             "$dotnet = Join-Path $env:USERPROFILE '.dotnet\\dotnet.exe'; "
             f"& $dotnet run --project {build_spectrum_csharp.quote_ps(runner_win)} "
             "--configuration Release --verbosity quiet -- "
@@ -369,6 +384,8 @@ def run_capture() -> dict[str, object]:
         sys.stderr.write(result.stdout)
         sys.stderr.write(result.stderr)
         raise SystemExit(result.returncode)
+    if env.get("DOMERS_TRACE_STAGE"):
+        sys.stderr.write(result.stderr)
     return json.loads(result.stdout)
 
 

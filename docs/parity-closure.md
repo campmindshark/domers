@@ -24,9 +24,18 @@ and hardware output. Physical hardware acceptance is tracked separately.
 | Orientation input | Datagram parsing, device map, quaternion state, calibration, action flags, poi speed, and stale-device removal are implemented. | Visualizer-specific orientation frame equivalence remains tied to visualizer parity. |
 | Madmom | Launch args support wrapper, Spectrum-style Python working directory, async child ingestion, derived audio input indexes, and fake-sidecar tests are covered. | Shipping a bundled Madmom distribution is release packaging; runtime behavior is no-hardware tested. |
 | Beat timing | Wall-clock tap tempo, BPM string, tap counter, reset, Madmom median/backwards reset, Link/Carabiner sidecar tempo ingestion, and Spectrum truncating progress math are covered. | Packaged macOS/Linux Link sidecar remains release integration work. |
-| Operator UI | Browser shell has structured input/tempo/Madmom and output/layout config controls, full config editor, full palette editor, input status, MIDI log, orientation calibration, debug visuals, and preview. | Browser automation/screenshots are evidence work, not feature parity deferral. |
+| Operator UI | Browser shell has structured input/tempo/Madmom and output/layout config controls, full config editor, full palette editor, input status, MIDI log, orientation calibration, debug visuals, preview, and no-hardware HTTP route coverage for operator flows. | Browser screenshots remain release evidence, not feature parity deferral. |
 | Simulators | Dome canvas plus bar/stage command previews are exposed on the live preview and sandbox page. | Exact visual artwork remains visualizer/UI polish, not first-version parity. |
 | Hardware output | OPC mapping/write/reconnect loopback tests pass. | Physical dome, bar, stage, inputs, and reconnect sign-off are intentionally deferred. |
+
+## Open TODOs
+
+- Stage Depth exactness: the Rust renderer now uses Spectrum palette gradients,
+  stage brightness, truncating RGB scale math, and the captured stage command
+  order, but its hash still differs from the captured
+  `LEDStageDepthLevelVisualizer` golden. Leave this as an explicit visualizer
+  parity TODO until the remaining difference in tracer timing, side partitioning,
+  or color interpolation is isolated.
 
 ## Required Gates
 

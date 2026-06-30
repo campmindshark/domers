@@ -7,11 +7,14 @@ use domers_core::Rgb;
 use serde::Deserialize;
 use tokio::{io::AsyncWriteExt, net::TcpStream};
 
+use std::sync::OnceLock;
+
 use crate::{BarCommand, DomeCommand, StageCommand};
 
 const DOME_MAPPING_JSON: &str = include_str!("../../../fixtures/spectrum-csharp/dome_mapping.json");
 const DOME_MAX_STRIP_LENGTH: usize = 214;
 const DOME_BAR_CONTROL_BOX: usize = 5;
+static DOME_MAPPING: OnceLock<DomeMapping> = OnceLock::new();
 
 /// Dense persistent channel buffer matching Spectrum's flush semantics.
 #[derive(Clone, Debug, Default)]
@@ -148,7 +151,7 @@ impl OpcClient {
 ///
 /// Panics if the checked dome mapping fixture is invalid.
 pub fn apply_dome_commands(channel: &mut PersistentChannel, commands: &[DomeCommand]) {
-    let mapping = DomeMapping::load();
+    let mapping = dome_mapping();
     for command in commands {
         match command {
             DomeCommand::Flush => channel.flush(),
@@ -171,6 +174,26 @@ pub fn apply_dome_commands(channel: &mut PersistentChannel, commands: &[DomeComm
             }
         }
     }
+}
+
+/// Return Spectrum's logical strut index for a control box and local strut index.
+#[must_use]
+pub fn dome_strut_index_for_control_box(control_box: usize, local_index: usize) -> Option<usize> {
+    dome_mapping()
+        .fixture
+        .strut_positions
+        .iter()
+        .position(|position| {
+            position.control_box == control_box && position.control_box_strut_index == local_index
+        })
+}
+
+/// Return the Spectrum strut length for a logical strut index.
+#[must_use]
+pub fn dome_strut_length(strut_index: usize) -> Option<usize> {
+    let fixture = &dome_mapping().fixture;
+    let position = fixture.strut_positions.get(strut_index)?;
+    Some(fixture.strut_length(position.control_box_strut_index))
 }
 
 /// Apply bar commands to the dome OPC channel using Spectrum's bar-on-box-5 route.
@@ -314,6 +337,10 @@ impl DomeMapping {
             strand_pixel,
         ))
     }
+}
+
+fn dome_mapping() -> &'static DomeMapping {
+    DOME_MAPPING.get_or_init(DomeMapping::load)
 }
 
 impl DomeMappingFixture {

@@ -370,6 +370,8 @@ version = "0.1.0"
 dependencies = [
  "domers-core",
  "domers-outputs",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
