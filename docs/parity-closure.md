@@ -7,19 +7,17 @@ evidence. Green tests alone do not imply full Spectrum parity.
 ## Current Verdict
 
 `dome-rs` is expected to close all parity that can be proven without physical
-hardware or executing the old Spectrum app. The only accepted deferrals are
-physical hardware acceptance and evidence that requires running Spectrum on
-Windows. The no-hardware operator/runtime surface is covered by gates for input
-behavior, config editing, MIDI state/bindings/logs, orientation state, Madmom
-fake-sidecar ingestion, tempo surfaces, and dome/bar/stage simulator streams.
+hardware. Spectrum C# execution is now part of the parity process: visualizer
+frame hashes are captured by a headless Windows/.NET runner that bypasses WPF
+and hardware output. The only accepted deferral is physical hardware acceptance.
 
 ## Closure Matrix
 
 | Area | Current status | Closure gate |
 | --- | --- | --- |
 | Visualizer inventory | 17 used Spectrum visualizer names are tracked and dispatched. | Keep `INVENTORY` and `fixtures/spectrum-csharp/visualizer_frame_cases.json` in lockstep. |
-| Visualizer frame parity | Source hashes exist, but expected frame hashes are pending C# execution. | Every visualizer case has a non-null Spectrum frame hash and a Rust golden comparison. |
-| Dome visualizer algorithms | Several modes are deterministic approximations. | Volume, Radial, Race, Snakes, Splat, Quaternion, Paintbrush, TV Static, and Flash match Spectrum frame goldens or documented deviations. |
+| Visualizer frame parity | All 17 tracked cases have headless Spectrum C# frame hashes in `visualizer_frame_cases.json`. | Every visualizer case keeps a non-null Spectrum frame hash and gains a Rust golden comparison. |
+| Dome visualizer algorithms | Several modes are deterministic approximations and are not yet expected to match the newly captured Spectrum hashes. | Volume, Radial, Race, Snakes, Splat, Quaternion, Paintbrush, TV Static, and Flash match Spectrum frame goldens or documented deviations. |
 | Diagnostics | Dome/bar/stage diagnostics are wired. | C# frame goldens plus physical dome/bar/stage diagnostic sign-off. |
 | Audio input | UDP volume bridge, Spectrum audio device identity, all-endpoint index mapping, XML import, and Madmom audio-index derivation are covered. | Windows native capture can be added when OS access is needed; device semantics are represented and tested. |
 | MIDI input | UDP command transport feeds device-scoped state, configurable wildcard/exact bindings, runtime actions, knob/note defaults, Spectrum knob math, and a MIDI log. | Physical controller discovery is hardware acceptance; no-hardware MIDI behavior must remain tested. |
@@ -33,9 +31,9 @@ fake-sidecar ingestion, tempo surfaces, and dome/bar/stage simulator streams.
 ## Execution Order
 
 1. Keep no-hardware runtime and UI gates green.
-2. Add browser automation/screenshots for the now-wired operator panels.
-3. When hardware is available, run physical sign-off.
-4. Separately, when visualizer equivalence matters, capture Spectrum C# goldens and port against them.
+2. Port visualizer algorithms against the captured Spectrum C# frame hashes.
+3. Add browser automation/screenshots for the now-wired operator panels.
+4. When hardware is available, run physical sign-off.
 
 ## Required Gates
 
@@ -46,5 +44,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 python3 tools/check_visualizer_goldens.py
 ```
 
-The visualizer golden check is expected to fail until the Spectrum C# capture has
-been run and the pending frame hashes have been filled in.
+Refresh visualizer goldens with:
+
+```sh
+python3 tools/capture_spectrum_visualizer_frames.py
+```
+
+The flash-overlay visualizer currently captures an empty no-MIDI-trigger frame;
+the next exactness slice should add fixture input for a MIDI flash event before
+using that case as an algorithm comparison.

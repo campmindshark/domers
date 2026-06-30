@@ -1,13 +1,20 @@
 {
-  "capture_tool": "tools/extract_spectrum_fixtures.py",
+  "capture_metadata": {
+    "command": "python3 tools/capture_spectrum_visualizer_frames.py",
+    "description": "Headless visualizer execution through Spectrum C# classes with simulation-only output.",
+    "hardware_required": false,
+    "runner": "target/spectrum-visualizer-capture/SpectrumVisualizerCapture.csproj",
+    "source": "spectrum/Spectrum/spectrum_default_config.xml"
+  },
+  "capture_tool": "tools/capture_spectrum_visualizer_frames.py",
   "cases": [
     {
       "case": "dome_diagnostic_strut_iteration",
       "classification": "support",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "8386954984990879302"
       },
       "input": {
         "beat_progress": 0.25,
@@ -17,9 +24,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeStrutIterationDiagnosticVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeStrutIterationDiagnosticVisualizer.cs",
       "source_sha256": "3e04842201b5609f6cd5d182d51dab231c486856b3a1e2a9cb11a00a571e6d54"
@@ -29,8 +34,8 @@
       "classification": "support",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "12240629902473264199"
       },
       "input": {
         "beat_progress": 0.25,
@@ -40,9 +45,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeFlashColorsDiagnosticVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeFlashColorsDiagnosticVisualizer.cs",
       "source_sha256": "fae4f30456cbd7f3ba006fa63373622a551611d45376e341a3c98a12e5c648b3"
@@ -52,8 +55,8 @@
       "classification": "support",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "12240629902473264199"
       },
       "input": {
         "beat_progress": 0.25,
@@ -63,9 +66,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeStrandTestDiagnosticVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeStrandTestDiagnosticVisualizer.cs",
       "source_sha256": "de040307453d2eec0a52c59594824ee016a2f0321d3fb4d621479a1b9e62599d"
@@ -75,8 +76,8 @@
       "classification": "support",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "1495334963696189063"
       },
       "input": {
         "beat_progress": 0.25,
@@ -86,9 +87,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeFullColorFlashDiagnosticVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeFullColorFlashDiagnosticVisualizer.cs",
       "source_sha256": "9f503783090db13caaaec9026f4582f54d62adb2038591f339caeecf0b874e16"
@@ -98,8 +97,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "5168180348710641867"
       },
       "input": {
         "beat_progress": 0.25,
@@ -109,9 +108,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeVolumeVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeVolumeVisualizer.cs",
       "source_sha256": "197feb5d90d4a4e694f2f714a7e727ddd8e3691a0a4638ba285750ab600a59ff"
@@ -121,8 +118,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "4881996360069281260"
       },
       "input": {
         "beat_progress": 0.25,
@@ -133,7 +130,7 @@
         "volume": 0.7
       },
       "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
+        "C# capture failed: pixel.color missing"
       ],
       "name": "LEDDomeRadialVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeRadialVisualizer.cs",
@@ -144,8 +141,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "4793547196335683259"
       },
       "input": {
         "beat_progress": 0.25,
@@ -155,9 +152,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeRaceVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeRaceVisualizer.cs",
       "source_sha256": "a538271750112b11d83793712866a621fc0abb64d030f3fa926cf33643ed5591"
@@ -167,8 +162,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "18016181816440964175"
       },
       "input": {
         "beat_progress": 0.25,
@@ -178,9 +173,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeSnakesVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeSnakesVisualizer.cs",
       "source_sha256": "25ff895254e045262317b2b34b9923486a60f62c383520e60a8cce86e5d2eac4"
@@ -190,8 +183,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "12459070695921506308"
       },
       "input": {
         "beat_progress": 0.25,
@@ -202,7 +195,7 @@
         "volume": 0.7
       },
       "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
+        "C# capture failed: pixel.color missing"
       ],
       "name": "LEDDomeSplatVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeSplatVisualizer.cs",
@@ -213,8 +206,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "1564991241466880178"
       },
       "input": {
         "beat_progress": 0.25,
@@ -225,7 +218,7 @@
         "volume": 0.7
       },
       "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
+        "C# capture failed: pixel.color missing"
       ],
       "name": "LEDDomeQuaternionTestVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeQuaternionTestVisualizer.cs",
@@ -236,8 +229,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "12459070695921506308"
       },
       "input": {
         "beat_progress": 0.25,
@@ -248,7 +241,7 @@
         "volume": 0.7
       },
       "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
+        "C# capture failed: pixel.color missing"
       ],
       "name": "LEDDomeQuaternionMultiTestVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeQuaternionMultiTestVisualizer.cs",
@@ -259,8 +252,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "10309313106548111192"
       },
       "input": {
         "beat_progress": 0.25,
@@ -271,7 +264,7 @@
         "volume": 0.7
       },
       "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
+        "C# capture failed: pixel.color missing"
       ],
       "name": "LEDDomeQuaternionPaintbrushVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeQuaternionPaintbrushVisualizer.cs",
@@ -282,8 +275,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "5865480772540307484"
       },
       "input": {
         "beat_progress": 0.25,
@@ -293,9 +286,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeTVStaticVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeTVStaticVisualizer.cs",
       "source_sha256": "da528c02b4c75a91254b3f8e34644182dedc5a1c2ab3384250a6ea21e379d0ed"
@@ -305,8 +296,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "14695981039346656037"
       },
       "input": {
         "beat_progress": 0.25,
@@ -316,9 +307,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeFlashVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeFlashVisualizer.cs",
       "source_sha256": "07b2b3cb3044993c11ba7130dc7c41997c9e5466ffcf37ba1b389e7dd75d9199"
@@ -328,8 +317,8 @@
       "classification": "support",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "13293754234007146448"
       },
       "input": {
         "beat_progress": 0.25,
@@ -339,9 +328,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDBarFlashColorsDiagnosticVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDBarFlashColorsDiagnosticVisualizer.cs",
       "source_sha256": "1238b4e84ece84564123225b2e8317f05963371fcb08df5a66d4a9aaf4159b6a"
@@ -351,8 +338,8 @@
       "classification": "support",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "8782030011682513046"
       },
       "input": {
         "beat_progress": 0.25,
@@ -362,9 +349,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDStageFlashColorsDiagnosticVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDStageFlashColorsDiagnosticVisualizer.cs",
       "source_sha256": "e04abded9c60482dcd788f195090f6899d2a72486a12e1ec745722e0be9edecf"
@@ -374,8 +359,8 @@
       "classification": "live",
       "expected": {
         "kind": "frame_hash",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "13155595874918931506"
       },
       "input": {
         "beat_progress": 0.25,
@@ -385,9 +370,7 @@
         "palette_slot": 0,
         "volume": 0.7
       },
-      "known_unverified": [
-        "Frame hash is source-traceable but not captured until the C# fixture runner executes this case."
-      ],
+      "known_unverified": [],
       "name": "LEDStageDepthLevelVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDStageDepthLevelVisualizer.cs",
       "source_sha256": "1d8811dcfcf8adc3b252872bfb6b5c1edbe1ef7b7111ea58efa73af889e457c7"

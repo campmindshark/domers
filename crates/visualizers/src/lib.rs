@@ -814,9 +814,11 @@ mod tests {
             INVENTORY.len()
         );
         assert_eq!(
-            manifest.matches("\"pending_csharp_execution\"").count(),
+            manifest.matches("\"status\": \"captured\"").count(),
             INVENTORY.len()
         );
+        assert!(!manifest.contains("\"pending_csharp_execution\""));
+        assert!(!manifest.contains("\"value\": null"));
     }
 
     #[test]

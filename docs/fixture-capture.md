@@ -26,8 +26,18 @@ Check whether visualizer frame goldens are complete:
 python3 tools/check_visualizer_goldens.py
 ```
 
-This check intentionally fails while any visualizer case has
-`expected.status != "captured"` or a null `expected.value`.
+Capture visualizer frame goldens by running the old Spectrum code headlessly:
+
+```sh
+python3 tools/capture_spectrum_visualizer_frames.py
+```
+
+The visualizer capture runner references `Spectrum.csproj`, loads Spectrum's
+default XML config with the same serializer family as the WPF app, forces
+simulation-only/no-hardware output, invokes each visualizer directly, and writes
+captured hashes into `visualizer_frame_cases.json`. `check_visualizer_goldens.py`
+fails if any visualizer case has `expected.status != "captured"` or a null
+`expected.value`.
 
 Generated fixture groups:
 
@@ -49,9 +59,8 @@ Generated fixture groups:
 - Headless C# bar/stage simulator command queue semantics.
 - OPC packet bytes for single-pixel, sparse, and full-frame writes.
 - Source-traceable visualizer frame cases for every used Spectrum visualizer.
-- Captured Spectrum frame hashes for every visualizer case, produced on a
-  Windows/.NET machine that can execute the Spectrum WPF-targeted project or an
-  equivalent headless capture runner.
+- Captured Spectrum frame hashes for every visualizer case, produced by
+  `tools/capture_spectrum_visualizer_frames.py`.
 - Default and edge XML configs.
 - Orientation datagram examples.
 - Madmom stdout examples.

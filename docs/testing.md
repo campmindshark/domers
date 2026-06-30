@@ -26,7 +26,7 @@ node ui/check.mjs
 - Madmom sidecar launch argument, disabled-lifecycle behavior, managed stdout ingestion path, derived audio input index, and fake-sidecar runtime test.
 - Spectrum-compatible 64-entry palette indexing and gradient blending.
 - Shared-entry palette TOML serialization, parsing, and XML import golden output.
-- Visualizer simulator-frame harness and frame-hash snapshots for live dome modes.
+- Visualizer simulator-frame harness, local frame-hash snapshots for live dome modes, and headless Spectrum C# visualizer golden capture.
 - Server state contract for full config reload/apply, runtime config patching, palette patching, start/stop, metrics, input status, hardware status, and simulator frames.
 - HTTP adapter smoke coverage for UI, state, geometry, mapping, and start routes.
 - UI smoke markers for API/WebSocket wiring, pixel rendering, full palette controls, structured config controls, input status controls, and simulator controls.
@@ -63,6 +63,7 @@ Then open `http://127.0.0.1:3000`, click `Start`, and confirm the metrics advanc
 
 ```sh
 python3 tools/build_spectrum_csharp.py
+python3 tools/capture_spectrum_visualizer_frames.py
 python3 tools/check_visualizer_goldens.py
 ```
 
@@ -70,8 +71,9 @@ python3 tools/check_visualizer_goldens.py
 fixture capture. It initializes the Spectrum `Madmom` submodule if needed and
 builds `../spectrum/Spectrum/Spectrum.csproj` directly because the legacy
 solution's `Madmom/Madmom.pyproj` requires Visual Studio Python Tools.
-`check_visualizer_goldens.py` is expected to fail until C# frame hashes are
-captured.
+`capture_spectrum_visualizer_frames.py` executes the old Spectrum visualizers
+headlessly with simulation-only output, and `check_visualizer_goldens.py` ensures
+all captured hashes are present.
 
 Next additions: browser automation/screenshots, Docker Compose wrappers around the in-process OPC/input loopback tests, load tests, and physical hardware sign-off artifacts.
 
