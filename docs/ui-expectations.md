@@ -8,7 +8,7 @@ The shell lives in `ui/index.html` and is checked by `node ui/check.mjs`.
 
 Expected elements:
 
-- `Domers Operator` heading
+- `MindShark Dome Controls` heading
 - `Start` and `Stop` engine buttons
 - engine status text
 - WebSocket stream status text

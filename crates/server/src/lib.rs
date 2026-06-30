@@ -706,7 +706,7 @@ mod tests {
             "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
         )
         .await;
-        assert!(html.contains("Domers Operator"));
+        assert!(html.contains("MindShark Dome Controls"));
 
         let state = http_request(
             addr,
