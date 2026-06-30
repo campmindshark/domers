@@ -56,7 +56,6 @@ for (const marker of [
   'className="app-shell-content"',
   'className="operator-tabs"',
   'data-tab-target="runtime-panel"',
-  'data-tab-target="simulator-panel"',
   'data-tab-target="palettes-panel"',
   'data-tab-target="config-panel"',
   'className="operator-tab-panel is-active runtime-panel-grid"',

@@ -359,16 +359,8 @@ function LivePreviewPanel() {
   return (
     <section id="preview-drawer" aria-label="Live Preview">
       <h2>Live Preview</h2>
-      <SimulatorFrameView streamText="preview WebSocket disconnected" />
-    </section>
-  );
-}
-
-function SimulatorTabPanel() {
-  return (
-    <section aria-label="Simulator Sandbox">
-      <h2>Simulator Sandbox</h2>
       <p><a href="/simulator">Open isolated simulator</a></p>
+      <SimulatorFrameView streamText="preview WebSocket disconnected" />
     </section>
   );
 }
@@ -443,7 +435,6 @@ function ControlApp() {
       <div className="app-shell-content" aria-label="Operator Tabs">
         <nav className="operator-tabs" aria-label="Operator sections" role="tablist">
           <button id="runtime-tab" className="operator-tab is-active" type="button" role="tab" aria-controls="runtime-panel" aria-selected="true" data-tab-target="runtime-panel">Runtime</button>
-          <button id="simulator-tab" className="operator-tab" type="button" role="tab" aria-controls="simulator-panel" aria-selected="false" data-tab-target="simulator-panel">Simulator</button>
           <button id="palettes-tab" className="operator-tab" type="button" role="tab" aria-controls="palettes-panel" aria-selected="false" data-tab-target="palettes-panel">Palettes</button>
           <button id="config-tab" className="operator-tab" type="button" role="tab" aria-controls="config-panel" aria-selected="false" data-tab-target="config-panel">Config</button>
         </nav>
@@ -452,9 +443,6 @@ function ControlApp() {
           <InputsPanel />
           <DebugVisualsPanel />
           <LivePreviewPanel />
-        </section>
-        <section id="simulator-panel" className="operator-tab-panel" role="tabpanel" aria-labelledby="simulator-tab" hidden>
-          <SimulatorTabPanel />
         </section>
         <section id="palettes-panel" className="operator-tab-panel" role="tabpanel" aria-labelledby="palettes-tab" hidden>
           <PaletteDrawer />

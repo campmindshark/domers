@@ -25890,13 +25890,8 @@ function SimulatorFrameView({ streamText }) {
 function LivePreviewPanel() {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { id: "preview-drawer", "aria-label": "Live Preview", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Live Preview" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: "/simulator", children: "Open isolated simulator" }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SimulatorFrameView, { streamText: "preview WebSocket disconnected" })
-  ] });
-}
-function SimulatorTabPanel() {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { "aria-label": "Simulator Sandbox", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Simulator Sandbox" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: "/simulator", children: "Open isolated simulator" }) })
   ] });
 }
 function OpcTargetsFooter() {
@@ -25963,7 +25958,6 @@ function ControlApp() {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "app-shell-content", "aria-label": "Operator Tabs", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("nav", { className: "operator-tabs", "aria-label": "Operator sections", role: "tablist", children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "runtime-tab", className: "operator-tab is-active", type: "button", role: "tab", "aria-controls": "runtime-panel", "aria-selected": "true", "data-tab-target": "runtime-panel", children: "Runtime" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "simulator-tab", className: "operator-tab", type: "button", role: "tab", "aria-controls": "simulator-panel", "aria-selected": "false", "data-tab-target": "simulator-panel", children: "Simulator" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "palettes-tab", className: "operator-tab", type: "button", role: "tab", "aria-controls": "palettes-panel", "aria-selected": "false", "data-tab-target": "palettes-panel", children: "Palettes" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "config-tab", className: "operator-tab", type: "button", role: "tab", "aria-controls": "config-panel", "aria-selected": "false", "data-tab-target": "config-panel", children: "Config" })
       ] }),
@@ -25973,7 +25967,6 @@ function ControlApp() {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DebugVisualsPanel, {}),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LivePreviewPanel, {})
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", { id: "simulator-panel", className: "operator-tab-panel", role: "tabpanel", "aria-labelledby": "simulator-tab", hidden: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SimulatorTabPanel, {}) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", { id: "palettes-panel", className: "operator-tab-panel", role: "tabpanel", "aria-labelledby": "palettes-tab", hidden: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PaletteDrawer, {}) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("section", { id: "config-panel", className: "operator-tab-panel", role: "tabpanel", "aria-labelledby": "config-tab", hidden: true, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ConfigEditor, {}) })
     ] }),
