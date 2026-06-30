@@ -23,3 +23,15 @@ impl Default for EngineConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn default_config_fixture_contains_core_fields() {
+        let xml = include_str!("../../../fixtures/config/spectrum_default_config.xml");
+        assert!(xml.contains("<domeEnabled>true</domeEnabled>"));
+        assert!(xml.contains("<domeActiveVis>0</domeActiveVis>"));
+        assert!(xml.contains("<stageSideLengths>"));
+        assert!(xml.contains("<beatInput>0</beatInput>"));
+    }
+}

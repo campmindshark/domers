@@ -23,4 +23,19 @@ mod tests {
         assert_eq!(STAGE_SIDES, 48);
         assert_eq!(STAGE_LAYERS, 3);
     }
+
+    #[test]
+    fn matches_extracted_mapping_and_geometry_fixtures() {
+        let mapping = include_str!("../../../fixtures/spectrum-csharp/dome_mapping.json");
+        assert!(mapping.contains(r#""strut_count": 190"#));
+        assert!(mapping.contains(r#""bar_control_box": 5"#));
+
+        let geometry = include_str!("../../../fixtures/spectrum-csharp/dome_geometry.json");
+        assert!(geometry.contains(r#""line_count": 190"#));
+        assert!(geometry.contains(r#""point_count": 71"#));
+
+        let topology = include_str!("../../../fixtures/spectrum-csharp/bar_stage_topology.json");
+        assert!(topology.contains(r#""side_count": 48"#));
+        assert!(topology.contains(r#""layer_count": 3"#));
+    }
 }

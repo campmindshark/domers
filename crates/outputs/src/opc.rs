@@ -41,4 +41,13 @@ mod tests {
             vec![2, 0, 0, 6, 0x12, 0x34, 0x56, 0xaa, 0xbb, 0xcc]
         );
     }
+
+    #[test]
+    fn matches_extracted_csharp_opc_fixture() {
+        let expected = include_bytes!(
+            "../../../fixtures/spectrum-csharp/opc_packets/two_pixels_channel_2.bin"
+        );
+        let encoded = encode_frame(2, &[Rgb::from_u24(0x12_34_56), Rgb::from_u24(0xaa_bb_cc)]);
+        assert_eq!(encoded.as_slice(), expected);
+    }
 }
