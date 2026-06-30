@@ -8428,7 +8428,7 @@ function ConfigEditor() {
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "apply-structured-config", type: "button", children: "Apply Structured Config" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "apply-structured-config", type: "button", children: "Apply" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("fieldset", { className: "config-panel", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("legend", { children: "Output And Layout" }),
@@ -8523,8 +8523,8 @@ function ConfigEditor() {
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "config-actions", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "reload-config", type: "button", children: "Reload Config" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "apply-config", type: "button", children: "Apply JSON Config" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "reload-config", type: "button", children: "Reload" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "apply-config", type: "button", children: "Apply" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "config-status", children: "not loaded" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field json-config-field", children: [

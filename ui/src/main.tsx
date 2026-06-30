@@ -120,7 +120,7 @@ function ConfigEditor() {
           </section>
         </div>
         <button id="apply-structured-config" type="button">
-          Apply Structured Config
+          Apply
         </button>
       </fieldset>
       <fieldset className="config-panel">
@@ -217,10 +217,10 @@ function ConfigEditor() {
       </fieldset>
       <div className="config-actions">
         <button id="reload-config" type="button">
-          Reload Config
+          Reload
         </button>
         <button id="apply-config" type="button">
-          Apply JSON Config
+          Apply
         </button>
         <span id="config-status">not loaded</span>
       </div>
