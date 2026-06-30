@@ -5,6 +5,7 @@
 ## Features
 
 - Browser control page served by the Rust binary at `/`.
+- Dedicated simulator page served at `/simulator`.
 - Runtime controls for engine start/stop, active dome visualizer, flash speed, active palette slot, and runtime palette colors.
 - Dome simulator canvas streamed over WebSocket from engine frame data.
 - Spectrum-compatible dome topology and projection data for the full 7,580-LED dome layout.
@@ -42,6 +43,7 @@ See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette 
 ## API Surface
 
 - `GET /`: browser controls
+- `GET /simulator`: full simulator view
 - `GET /api/health`: health JSON
 - `GET /api/state`: current runtime state, config, metrics, and simulator inputs
 - `POST /api/start`: start the engine loop

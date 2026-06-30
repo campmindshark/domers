@@ -14,6 +14,7 @@ const required = [
   '../docs/ui-expectations.md',
   '../examples/domers.toml',
   './index.html',
+  './simulator.html',
   './main.mjs',
 ];
 
@@ -31,7 +32,9 @@ const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
 for (const marker of [
   'data-domers-app',
   'aria-label="Runtime Controls"',
-  'aria-label="Simulator Preview Inputs"',
+  'id="preview-drawer"',
+  '<summary>Preview</summary>',
+  'href="/simulator"',
   'Runtime palette colors',
   'id="start-engine"',
   'id="stop-engine"',
@@ -58,6 +61,21 @@ for (const marker of [
   }
 }
 
+const simulatorHtml = await readFile(new URL('./simulator.html', import.meta.url), 'utf8');
+for (const marker of [
+  'data-domers-simulator',
+  'MindShark Dome Simulator',
+  'href="/"',
+  'id="stream-status"',
+  'id="dome-simulator"',
+  'data-page="simulator"',
+]) {
+  if (!simulatorHtml.includes(marker)) {
+    console.error(`Missing required simulator page marker: ${marker}`);
+    process.exit(1);
+  }
+}
+
 const js = await readFile(new URL('./main.mjs', import.meta.url), 'utf8');
 for (const marker of [
   '/api/state',
@@ -76,6 +94,8 @@ for (const marker of [
   'function drawLed',
   'SPECTRUM_CANVAS_SIZE',
   'resizeSimulatorCanvas',
+  'ensureSimulatorStarted',
+  'stopSimulatorPreview',
   'window.addEventListener(\'resize\'',
 ]) {
   if (!js.includes(marker)) {

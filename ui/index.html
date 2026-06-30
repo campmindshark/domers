@@ -29,6 +29,16 @@
         display: block;
         margin: 0.75rem 0;
       }
+      details {
+        border: 1px solid #444;
+        margin: 1rem 0;
+        padding: 1rem;
+      }
+      summary {
+        cursor: pointer;
+        font-size: 1.25rem;
+        font-weight: 700;
+      }
       fieldset {
         border: 1px solid #444;
         margin: 1rem 0;
@@ -48,7 +58,6 @@
         <button id="start-engine" type="button">Start</button>
         <button id="stop-engine" type="button">Stop</button>
         <span id="engine-status">stopped</span>
-        <span id="stream-status">stream disconnected</span>
       </section>
       <section aria-label="Runtime Controls">
         <h2>Runtime Controls</h2>
@@ -102,31 +111,36 @@
           </div>
         </fieldset>
       </section>
-      <section aria-label="Simulator Preview Inputs">
-        <h2>Simulator Preview Inputs</h2>
-        <p>These inputs fake live audio and beat state until the matching runtime sources are connected.</p>
-        <label>
-          Audio volume preview
-          <input id="sim-volume" name="simVolume" type="range" min="0" max="1" step="0.01" value="0.7" />
-          <output id="sim-volume-value" for="sim-volume">0.7</output>
-        </label>
-        <label>
-          Beat phase preview
-          <input id="sim-beat-progress" name="simBeatProgress" type="range" min="0" max="1" step="0.01" value="0.25" />
-          <output id="sim-beat-progress-value" for="sim-beat-progress">0.25</output>
-        </label>
-        <label>
-          <input id="sim-flash-active" name="simFlashActive" type="checkbox" checked />
-          Flash overlay active preview
-        </label>
-      </section>
-      <section aria-label="Metrics">
-        <p>Engine frames: <span id="metric-frames" class="metric">0</span></p>
-        <p>Simulator frames: <span id="metric-simulator-frames" class="metric">0</span></p>
-      </section>
-      <section aria-label="Simulator">
-        <canvas id="dome-simulator" width="750" height="750" data-frame-source="websocket"></canvas>
-      </section>
+      <details id="preview-drawer">
+        <summary>Preview</summary>
+        <p>The simulator connects only while this drawer is open. Open the full view at <a href="/simulator">/simulator</a>.</p>
+        <section aria-label="Simulator Preview Inputs">
+          <h2>Simulator Preview Inputs</h2>
+          <p>These inputs fake live audio and beat state until the matching runtime sources are connected.</p>
+          <label>
+            Audio volume preview
+            <input id="sim-volume" name="simVolume" type="range" min="0" max="1" step="0.01" value="0.7" />
+            <output id="sim-volume-value" for="sim-volume">0.7</output>
+          </label>
+          <label>
+            Beat phase preview
+            <input id="sim-beat-progress" name="simBeatProgress" type="range" min="0" max="1" step="0.01" value="0.25" />
+            <output id="sim-beat-progress-value" for="sim-beat-progress">0.25</output>
+          </label>
+          <label>
+            <input id="sim-flash-active" name="simFlashActive" type="checkbox" checked />
+            Flash overlay active preview
+          </label>
+        </section>
+        <section aria-label="Metrics">
+          <span id="stream-status">stream disconnected</span>
+          <p>Engine frames: <span id="metric-frames" class="metric">0</span></p>
+          <p>Simulator frames: <span id="metric-simulator-frames" class="metric">0</span></p>
+        </section>
+        <section aria-label="Simulator">
+          <canvas id="dome-simulator" width="750" height="750" data-frame-source="websocket"></canvas>
+        </section>
+      </details>
     </main>
     <script type="module" src="./main.mjs"></script>
   </body>

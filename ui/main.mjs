@@ -14,6 +14,7 @@ const paletteSecondary = document.querySelector('#palette-secondary');
 const paletteAccent = document.querySelector('#palette-accent');
 const metricFrames = document.querySelector('#metric-frames');
 const metricSimulatorFrames = document.querySelector('#metric-simulator-frames');
+const previewDrawer = document.querySelector('#preview-drawer');
 const canvas = document.querySelector('#dome-simulator');
 const context = canvas?.getContext('2d');
 const SPECTRUM_CANVAS_SIZE = 750;
@@ -22,6 +23,8 @@ const SPECTRUM_PROJECTION_SPAN = 690;
 let domeLayout;
 let domeLedPoints = [];
 let latestSimulatorFrame;
+let simulatorStarted = false;
+let simulatorSocket;
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -44,21 +47,51 @@ async function loadDomeLayout() {
 }
 
 function updateSnapshot(snapshot) {
-  status.textContent = snapshot.running ? 'running' : 'stopped';
-  metricFrames.textContent = String(snapshot.metrics.frames);
-  metricSimulatorFrames.textContent = String(snapshot.metrics.simulator_frames);
-  activeVisualizer.value = String(snapshot.config.dome_active_vis);
-  flashSpeed.value = String(snapshot.config.flash_speed);
-  flashSpeedValue.textContent = String(snapshot.config.flash_speed);
-  paletteIndex.value = String(snapshot.config.color_palette_index);
-  simVolume.value = String(snapshot.simulator.volume);
-  simVolumeValue.textContent = String(snapshot.simulator.volume);
-  simBeatProgress.value = String(snapshot.simulator.beat_progress);
-  simBeatProgressValue.textContent = String(snapshot.simulator.beat_progress);
-  simFlashActive.checked = snapshot.simulator.flash_active;
-  palettePrimary.value = toColorInput(paletteColor(snapshot, 0));
-  paletteSecondary.value = toColorInput(paletteColor(snapshot, 1));
-  paletteAccent.value = toColorInput(paletteColor(snapshot, 2));
+  if (status) {
+    status.textContent = snapshot.running ? 'running' : 'stopped';
+  }
+  if (metricFrames) {
+    metricFrames.textContent = String(snapshot.metrics.frames);
+  }
+  if (metricSimulatorFrames) {
+    metricSimulatorFrames.textContent = String(snapshot.metrics.simulator_frames);
+  }
+  if (activeVisualizer) {
+    activeVisualizer.value = String(snapshot.config.dome_active_vis);
+  }
+  if (flashSpeed) {
+    flashSpeed.value = String(snapshot.config.flash_speed);
+  }
+  if (flashSpeedValue) {
+    flashSpeedValue.textContent = String(snapshot.config.flash_speed);
+  }
+  if (paletteIndex) {
+    paletteIndex.value = String(snapshot.config.color_palette_index);
+  }
+  if (simVolume) {
+    simVolume.value = String(snapshot.simulator.volume);
+  }
+  if (simVolumeValue) {
+    simVolumeValue.textContent = String(snapshot.simulator.volume);
+  }
+  if (simBeatProgress) {
+    simBeatProgress.value = String(snapshot.simulator.beat_progress);
+  }
+  if (simBeatProgressValue) {
+    simBeatProgressValue.textContent = String(snapshot.simulator.beat_progress);
+  }
+  if (simFlashActive) {
+    simFlashActive.checked = snapshot.simulator.flash_active;
+  }
+  if (palettePrimary) {
+    palettePrimary.value = toColorInput(paletteColor(snapshot, 0));
+  }
+  if (paletteSecondary) {
+    paletteSecondary.value = toColorInput(paletteColor(snapshot, 1));
+  }
+  if (paletteAccent) {
+    paletteAccent.value = toColorInput(paletteColor(snapshot, 2));
+  }
 }
 
 function toColorInput(color) {
@@ -223,7 +256,9 @@ function handleSimulatorFrame(frame) {
 async function refreshState() {
   const snapshot = await request('/api/state');
   updateSnapshot(snapshot);
-  handleSimulatorFrame(await request('/api/simulator/frame'));
+  if (simulatorStarted) {
+    handleSimulatorFrame(await request('/api/simulator/frame'));
+  }
 }
 
 async function patchSimulatorControls() {
@@ -236,7 +271,7 @@ async function patchSimulatorControls() {
     }),
   });
   updateSnapshot(snapshot);
-  handleSimulatorFrame(await request('/api/simulator/frame'));
+  await refreshPreviewFrame();
 }
 
 async function patchRuntimeControls() {
@@ -249,7 +284,7 @@ async function patchRuntimeControls() {
     }),
   });
   updateSnapshot(snapshot);
-  handleSimulatorFrame(await request('/api/simulator/frame'));
+  await refreshPreviewFrame();
 }
 
 async function patchPaletteColor(relativeIndex, colorInput) {
@@ -262,16 +297,55 @@ async function patchPaletteColor(relativeIndex, colorInput) {
     }),
   });
   updateSnapshot(snapshot);
+  await refreshPreviewFrame();
+}
+
+async function refreshPreviewFrame() {
+  if (simulatorStarted) {
+    handleSimulatorFrame(await request('/api/simulator/frame'));
+  }
+}
+
+async function ensureSimulatorStarted() {
+  if (simulatorStarted || !canvas) {
+    return;
+  }
+  simulatorStarted = true;
+  if (!domeLayout) {
+    await loadDomeLayout();
+  } else {
+    rebuildDomeLedPoints();
+  }
   handleSimulatorFrame(await request('/api/simulator/frame'));
+  connectSimulatorStream();
+}
+
+function stopSimulatorPreview() {
+  simulatorStarted = false;
+  if (simulatorSocket) {
+    simulatorSocket.close();
+    simulatorSocket = undefined;
+  }
+  if (streamStatus) {
+    streamStatus.textContent = 'stream disconnected';
+  }
 }
 
 function connectSimulatorStream() {
+  if (simulatorSocket) {
+    return;
+  }
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const socket = new WebSocket(`${scheme}://${window.location.host}/ws/simulator`);
-  streamStatus.textContent = 'stream connecting';
+  simulatorSocket = socket;
+  if (streamStatus) {
+    streamStatus.textContent = 'stream connecting';
+  }
 
   socket.addEventListener('open', () => {
-    streamStatus.textContent = 'stream connected';
+    if (streamStatus) {
+      streamStatus.textContent = 'stream connected';
+    }
   });
 
   socket.addEventListener('message', event => {
@@ -279,8 +353,13 @@ function connectSimulatorStream() {
   });
 
   socket.addEventListener('close', () => {
-    streamStatus.textContent = 'stream disconnected';
-    window.setTimeout(connectSimulatorStream, 1000);
+    simulatorSocket = undefined;
+    if (streamStatus) {
+      streamStatus.textContent = 'stream disconnected';
+    }
+    if (simulatorStarted) {
+      window.setTimeout(connectSimulatorStream, 1000);
+    }
   });
 }
 
@@ -294,7 +373,9 @@ document.querySelector('#stop-engine')?.addEventListener('click', async () => {
 
 for (const input of [activeVisualizer, flashSpeed, paletteIndex]) {
   input?.addEventListener('input', async () => {
-    flashSpeedValue.textContent = flashSpeed.value;
+    if (flashSpeedValue) {
+      flashSpeedValue.textContent = flashSpeed.value;
+    }
     await patchRuntimeControls();
   });
 }
@@ -315,14 +396,27 @@ for (const input of [
   simFlashActive,
 ]) {
   input?.addEventListener('input', async () => {
-    simVolumeValue.textContent = simVolume.value;
-    simBeatProgressValue.textContent = simBeatProgress.value;
+    if (simVolumeValue) {
+      simVolumeValue.textContent = simVolume.value;
+    }
+    if (simBeatProgressValue) {
+      simBeatProgressValue.textContent = simBeatProgress.value;
+    }
     await patchSimulatorControls();
   });
 }
 
+previewDrawer?.addEventListener('toggle', async () => {
+  if (previewDrawer.open) {
+    await ensureSimulatorStarted();
+  } else {
+    stopSimulatorPreview();
+  }
+});
+
 window.addEventListener('resize', redrawLatestSimulatorFrame);
 
-await loadDomeLayout();
 await refreshState();
-connectSimulatorStream();
+if (document.body?.dataset.page === 'simulator') {
+  await ensureSimulatorStarted();
+}

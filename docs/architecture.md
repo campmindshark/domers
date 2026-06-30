@@ -30,6 +30,7 @@ The server crate implements both the in-process `ServerState` contract and the r
 HTTP and WebSocket surface:
 
 - `GET /`: browser operator shell
+- `GET /simulator`: dedicated simulator page
 - `GET /main.mjs`: browser control script
 - `GET /api/health`: health JSON
 - `GET /api/state`: running state, engine config, simulator inputs, and metrics
@@ -69,6 +70,10 @@ Stress tests cover:
 ## Configuration
 
 `dome-rs` native configuration is TOML. Runtime code loads TOML, not XML. Legacy Spectrum XML is handled only by the import command documented in [`configuration.md`](configuration.md).
+
+## Simulator Preview
+
+The live control page keeps simulator work lazy. It fetches runtime state on load, then starts geometry/mapping requests, one preview frame request, and the simulator WebSocket only when the `Preview` drawer opens. The dedicated `/simulator` page starts the simulator immediately.
 
 ## Beat Input
 

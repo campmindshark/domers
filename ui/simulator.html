@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MindShark Dome Simulator</title>
+    <style>
+      body {
+        background: #111;
+        color: #eee;
+        font-family: system-ui, sans-serif;
+        margin: 1rem;
+      }
+      canvas {
+        aspect-ratio: 1 / 1;
+        background: #000;
+        border: 1px solid #555;
+        box-sizing: border-box;
+        display: block;
+        height: auto;
+        max-width: calc(100vw - 2rem);
+        width: 100%;
+      }
+      .metric {
+        font-variant-numeric: tabular-nums;
+      }
+      a {
+        color: #8cc8ff;
+      }
+    </style>
+  </head>
+  <body data-page="simulator">
+    <main data-domers-simulator>
+      <h1>MindShark Dome Simulator</h1>
+      <p><a href="/">Back to controls</a></p>
+      <section aria-label="Metrics">
+        <span id="stream-status">stream disconnected</span>
+        <p>Engine frames: <span id="metric-frames" class="metric">0</span></p>
+        <p>Simulator frames: <span id="metric-simulator-frames" class="metric">0</span></p>
+      </section>
+      <section aria-label="Simulator">
+        <canvas id="dome-simulator" width="750" height="750" data-frame-source="websocket"></canvas>
+      </section>
+    </main>
+    <script type="module" src="./main.mjs"></script>
+  </body>
+</html>

@@ -294,6 +294,7 @@ impl AppRuntime {
     pub fn router(self) -> Router {
         Router::new()
             .route("/", get(index_html))
+            .route("/simulator", get(simulator_html))
             .route("/main.mjs", get(main_js))
             .route("/api/health", get(health_json))
             .route("/api/state", get(get_state))
@@ -462,6 +463,10 @@ pub struct SimulatorControlsPatch {
 
 async fn index_html() -> Html<&'static str> {
     Html(include_str!("../../../ui/index.html"))
+}
+
+async fn simulator_html() -> Html<&'static str> {
+    Html(include_str!("../../../ui/simulator.html"))
 }
 
 async fn main_js() -> impl IntoResponse {
@@ -707,6 +712,13 @@ mod tests {
         )
         .await;
         assert!(html.contains("MindShark Dome Controls"));
+
+        let simulator = http_request(
+            addr,
+            "GET /simulator HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
+        )
+        .await;
+        assert!(simulator.contains("MindShark Dome Simulator"));
 
         let state = http_request(
             addr,

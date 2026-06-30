@@ -16,14 +16,13 @@ Expected elements:
 - `flashSpeed` slider
 - eight palette slots matching Spectrum's VJ HUD selection
 - runtime palette color controls for entries 1-3 in the selected palette slot
-- simulator volume, beat phase, and flash-active controls
-- frame and simulator-frame metrics
-- `dome-simulator` canvas using the WebSocket frame source
+- closed `Preview` drawer
+- link from the preview drawer to `/simulator`
 
 TODO: Add image of the operator shell.
 
 - Capture: browser window at desktop size.
-- Expected: all controls above are visible, simulator canvas is black/empty before frames arrive.
+- Expected: runtime controls are visible and the `Preview` drawer is closed.
 - Suggested file: `docs/images/ui-operator-shell.png`.
 
 ## Running Engine State
@@ -62,10 +61,13 @@ TODO: Add image sequence of the visualizer selector.
 
 Expected simulator behavior:
 
+- `/simulator` is a dedicated simulator page
+- the live controls page starts simulator work only after opening the `Preview` drawer
 - dome canvas uses frame data from the server, not direct hardware state
 - per-pixel visualizers render visible pixels
 - buffer-based visualizers can render with OPC disabled
 - display color compensation is applied only to the UI view, never to OPC bytes
+- preview drawer shows simulator volume, beat phase, flash-active controls, frame metrics, stream status, and `dome-simulator`
 
 TODO: Add image of a non-empty dome simulator frame.
 
