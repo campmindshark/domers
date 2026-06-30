@@ -76,9 +76,9 @@ Stress tests cover:
 
 The live control page keeps simulator work lazy. It fetches runtime state on load, then starts geometry/mapping requests, one preview frame request, and the simulator WebSocket only when the `Preview` drawer opens. The dedicated `/simulator` page starts the simulator immediately and uses request-local controls through `POST /api/simulator/sandbox-frame`, so changing that page does not change runtime config or hardware output.
 
-## Beat Input
+## Beat And Input Runtime
 
-The beat engine accepts beat events from tap tempo, fake tests, and Madmom-compatible `BEAT:{seconds}` lines. `domers-inputs` includes a managed sidecar wrapper for the Spectrum launch contract. Server-side wiring from that child process into live beat state is separate runtime work.
+The runtime accepts tap tempo, MIDI commands, audio volume samples, orientation datagrams, and Madmom-compatible `BEAT:{seconds}` lines through explicit input paths. The server exposes input health in `/api/state`, and `POST /api/input/tap` records human tap tempo. `domers-inputs` includes a managed sidecar wrapper for the Spectrum launch contract; release packaging is responsible for providing a runnable Madmom command.
 
 ## Intentional Deviations
 

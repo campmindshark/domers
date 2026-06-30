@@ -40,7 +40,13 @@ node ui/check.mjs
 Live local smoke:
 
 ```sh
-cargo run --bin domers -- --config examples/domers.toml --bind 127.0.0.1:3000
+cargo run --bin domers -- run --config examples/domers.toml --bind 127.0.0.1:3000
+```
+
+Preflight the same config without starting outputs:
+
+```sh
+cargo run --bin domers -- doctor --config examples/domers.toml --bind 127.0.0.1:3000
 ```
 
 Then open `http://127.0.0.1:3000`, click `Start`, and confirm the metrics advance.

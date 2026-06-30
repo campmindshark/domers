@@ -130,6 +130,7 @@ name = "domers"
 version = "0.1.0"
 dependencies = [
  "domers-core",
+ "domers-inputs",
  "domers-outputs",
  "domers-server",
  "tokio",

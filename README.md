@@ -17,10 +17,16 @@
 ## Quick Start
 
 ```sh
-cargo run --bin domers -- --config examples/domers.toml --bind 127.0.0.1:3000
+cargo run --bin domers -- run --config examples/domers.toml --bind 127.0.0.1:3000
 ```
 
 Open `http://127.0.0.1:3000` and use **MindShark Dome Controls**.
+
+Check config, bind address, OPC address syntax, and Madmom command availability without starting output:
+
+```sh
+cargo run --bin domers -- doctor --config examples/domers.toml --bind 127.0.0.1:3000
+```
 
 ## Configuration
 
@@ -45,11 +51,12 @@ See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette 
 - `GET /`: browser controls
 - `GET /simulator`: full simulator view
 - `GET /api/health`: health JSON
-- `GET /api/state`: current runtime state, config, metrics, and simulator inputs
+- `GET /api/state`: current runtime state, config, metrics, simulator inputs, hardware status, and input status
 - `POST /api/start`: start the engine loop
 - `POST /api/stop`: stop the engine loop
 - `PATCH /api/config/dome`: update dome runtime controls
 - `PATCH /api/config/palette`: update one runtime palette color
+- `POST /api/input/tap`: record one tap-tempo input
 - `GET /api/dome/geometry`: dome projection geometry
 - `GET /api/dome/mapping`: dome strut and LED mapping
 - `PATCH /api/simulator`: update simulator-only preview inputs

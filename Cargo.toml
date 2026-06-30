@@ -20,6 +20,7 @@ rust-version.workspace = true
 
 [dependencies]
 domers-core = { path = "crates/core" }
+domers-inputs = { path = "crates/inputs" }
 domers-outputs = { path = "crates/outputs" }
 domers-server = { path = "crates/server" }
 tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "signal"] }

@@ -24,7 +24,7 @@ cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml
 
 **Reason:** The old virtualenv path is a Windows packaging detail, not the feature. The feature is managed beat tracking: start with the selected audio input, restart on relevant config changes, parse beat timestamps, and feed the beat engine.
 
-**Validation:** `domers-inputs` parses valid and malformed `BEAT:` lines and tests sidecar launch arguments plus disabled lifecycle behavior. `domers-core` tests Madmom beat timing windows. Remaining coverage: feeding sidecar stdout into live beat state inside the server runtime.
+**Validation:** `domers-inputs` parses valid and malformed `BEAT:` lines and tests sidecar launch arguments plus disabled lifecycle behavior. `domers-core` tests Madmom beat timing windows. `domers-server` tests feeding parsed Madmom beat lines into runtime input state.
 
 ## Browser Simulator Source
 
