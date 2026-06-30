@@ -164,6 +164,69 @@
           <button id="apply-structured-config" type="button">Apply Structured Config</button>
           <p>MIDI bindings: <span id="config-midi-bindings">none</span></p>
         </fieldset>
+        <fieldset>
+          <legend>Output And Layout Config</legend>
+          <label>
+            Dome hardware enabled
+            <input id="config-dome-enabled" name="configDomeEnabled" type="checkbox" />
+          </label>
+          <label>
+            Dome simulator enabled
+            <input id="config-dome-simulation-enabled" name="configDomeSimulationEnabled" type="checkbox" />
+          </label>
+          <label>
+            Dome OPC address
+            <input id="config-dome-opc-address" name="configDomeOpcAddress" type="text" />
+          </label>
+          <label>
+            Dome brightness
+            <input id="config-dome-brightness" name="configDomeBrightness" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <label>
+            Bar hardware enabled
+            <input id="config-bar-enabled" name="configBarEnabled" type="checkbox" />
+          </label>
+          <label>
+            Bar simulator enabled
+            <input id="config-bar-simulation-enabled" name="configBarSimulationEnabled" type="checkbox" />
+          </label>
+          <label>
+            Bar infinity length
+            <input id="config-bar-infinity-length" name="configBarInfinityLength" type="number" min="0" step="1" />
+          </label>
+          <label>
+            Bar infinity width
+            <input id="config-bar-infinity-width" name="configBarInfinityWidth" type="number" min="0" step="1" />
+          </label>
+          <label>
+            Bar runner length
+            <input id="config-bar-runner-length" name="configBarRunnerLength" type="number" min="0" step="1" />
+          </label>
+          <label>
+            Bar brightness
+            <input id="config-bar-brightness" name="configBarBrightness" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <label>
+            Stage hardware enabled
+            <input id="config-stage-enabled" name="configStageEnabled" type="checkbox" />
+          </label>
+          <label>
+            Stage simulator enabled
+            <input id="config-stage-simulation-enabled" name="configStageSimulationEnabled" type="checkbox" />
+          </label>
+          <label>
+            Stage OPC address
+            <input id="config-stage-opc-address" name="configStageOpcAddress" type="text" />
+          </label>
+          <label>
+            Stage brightness
+            <input id="config-stage-brightness" name="configStageBrightness" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <label>
+            Stage side lengths
+            <textarea id="config-stage-side-lengths" class="config-editor" name="configStageSideLengths" rows="3" spellcheck="false"></textarea>
+          </label>
+        </fieldset>
         <div>
           <button id="reload-config" type="button">Reload Config</button>
           <button id="apply-config" type="button">Apply Config</button>

@@ -11,7 +11,7 @@ Expected elements:
 - `MindShark Dome Control Panel` heading
 - `Start` and `Stop` engine buttons
 - engine status text
-- `Config Editor` drawer with full native JSON config reload/apply controls
+- `Config Editor` drawer with full native JSON config reload/apply controls plus structured input, tempo, Madmom, output, and layout controls
 - floating `OPC Targets` footer showing dome/bar and stage target addresses, enabled state, connection state, successful frame count, and last error
 - WebSocket stream status text
 - `domeActiveVis` selector with Volume, Radial, Race, Snakes, Quaternion Test, Quaternion Multi Test, Quaternion Paintbrush, Splat, and TV Static

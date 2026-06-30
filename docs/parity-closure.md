@@ -26,7 +26,7 @@ fake-sidecar ingestion, tempo surfaces, and dome/bar/stage simulator streams.
 | Orientation input | Datagram parsing, device map, quaternion state, calibration, action flags, poi speed, and stale-device removal are implemented. | Visualizer-specific orientation frame equivalence remains tied to visualizer parity. |
 | Madmom | Launch args support wrapper and Python-style tracker invocation; runtime uses async child ingestion, derived audio input indexes, and fake-sidecar tests. | Old bundled Windows discovery can only be proven when running Spectrum/Windows packaging. |
 | Beat timing | Tap tempo, BPM string, tap counter, reset, Madmom median/backwards reset, and Spectrum truncating progress math are covered. | Any further mismatch must be backed by old Spectrum execution evidence. |
-| Operator UI | Browser shell has structured input/tempo/Madmom config controls, full config editor, full palette editor, input status, MIDI log, orientation calibration, debug visuals, and preview. | Browser automation/screenshots are evidence work, not feature parity deferral. |
+| Operator UI | Browser shell has structured input/tempo/Madmom and output/layout config controls, full config editor, full palette editor, input status, MIDI log, orientation calibration, debug visuals, and preview. | Browser automation/screenshots are evidence work, not feature parity deferral. |
 | Simulators | Dome canvas plus bar/stage command previews are exposed on the live preview and sandbox page. | Exact visual artwork remains visualizer/UI polish, not first-version parity. |
 | Hardware output | OPC mapping/write/reconnect loopback tests pass. | Physical dome, bar, stage, inputs, and reconnect sign-off are intentionally deferred. |
 

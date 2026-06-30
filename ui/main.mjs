@@ -19,6 +19,21 @@ const configMadmomCommand = document.querySelector('#config-madmom-command');
 const configMadmomTracker = document.querySelector('#config-madmom-tracker');
 const configMadmomAudioIndex = document.querySelector('#config-madmom-audio-index');
 const configMidiBindings = document.querySelector('#config-midi-bindings');
+const configDomeEnabled = document.querySelector('#config-dome-enabled');
+const configDomeSimulationEnabled = document.querySelector('#config-dome-simulation-enabled');
+const configDomeOpcAddress = document.querySelector('#config-dome-opc-address');
+const configDomeBrightness = document.querySelector('#config-dome-brightness');
+const configBarEnabled = document.querySelector('#config-bar-enabled');
+const configBarSimulationEnabled = document.querySelector('#config-bar-simulation-enabled');
+const configBarInfinityLength = document.querySelector('#config-bar-infinity-length');
+const configBarInfinityWidth = document.querySelector('#config-bar-infinity-width');
+const configBarRunnerLength = document.querySelector('#config-bar-runner-length');
+const configBarBrightness = document.querySelector('#config-bar-brightness');
+const configStageEnabled = document.querySelector('#config-stage-enabled');
+const configStageSimulationEnabled = document.querySelector('#config-stage-simulation-enabled');
+const configStageOpcAddress = document.querySelector('#config-stage-opc-address');
+const configStageBrightness = document.querySelector('#config-stage-brightness');
+const configStageSideLengths = document.querySelector('#config-stage-side-lengths');
 const simVolume = document.querySelector('#sim-volume');
 const simVolumeValue = document.querySelector('#sim-volume-value');
 const simBeatProgress = document.querySelector('#sim-beat-progress');
@@ -126,6 +141,51 @@ function updateStructuredConfigFields(config) {
       ? bindings.map(binding => `${binding.command_kind}:${binding.index}->${binding.action}`).join(', ')
       : 'none';
   }
+  if (configDomeEnabled) {
+    configDomeEnabled.checked = Boolean(config.dome?.enabled);
+  }
+  if (configDomeSimulationEnabled) {
+    configDomeSimulationEnabled.checked = Boolean(config.dome?.simulation_enabled);
+  }
+  if (configDomeOpcAddress) {
+    configDomeOpcAddress.value = config.dome?.opc_address ?? '';
+  }
+  if (configDomeBrightness) {
+    configDomeBrightness.value = config.dome?.brightness ?? '';
+  }
+  if (configBarEnabled) {
+    configBarEnabled.checked = Boolean(config.bar?.enabled);
+  }
+  if (configBarSimulationEnabled) {
+    configBarSimulationEnabled.checked = Boolean(config.bar?.simulation_enabled);
+  }
+  if (configBarInfinityLength) {
+    configBarInfinityLength.value = config.bar?.infinity_length ?? '';
+  }
+  if (configBarInfinityWidth) {
+    configBarInfinityWidth.value = config.bar?.infinity_width ?? '';
+  }
+  if (configBarRunnerLength) {
+    configBarRunnerLength.value = config.bar?.runner_length ?? '';
+  }
+  if (configBarBrightness) {
+    configBarBrightness.value = config.bar?.brightness ?? '';
+  }
+  if (configStageEnabled) {
+    configStageEnabled.checked = Boolean(config.stage?.enabled);
+  }
+  if (configStageSimulationEnabled) {
+    configStageSimulationEnabled.checked = Boolean(config.stage?.simulation_enabled);
+  }
+  if (configStageOpcAddress) {
+    configStageOpcAddress.value = config.stage?.opc_address ?? '';
+  }
+  if (configStageBrightness) {
+    configStageBrightness.value = config.stage?.brightness ?? '';
+  }
+  if (configStageSideLengths) {
+    configStageSideLengths.value = (config.stage?.side_lengths ?? []).join(', ');
+  }
 }
 
 function readConfigEditor() {
@@ -144,6 +204,32 @@ function writeOptionalString(target, key, value) {
   }
 }
 
+function numberOrFallback(value, fallback) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function integerOrFallback(value, fallback) {
+  const parsed = numberOrFallback(value, fallback);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parseIntegerList(value, fallback) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  const parsed = trimmed.split(/[\s,]+/).filter(Boolean).map(Number);
+  if (!parsed.length || parsed.some(item => !Number.isInteger(item) || item < 0)) {
+    return fallback;
+  }
+  return parsed;
+}
+
 function updateConfigFromStructuredFields() {
   const config = readConfigEditor();
   config.inputs ??= {};
@@ -152,6 +238,9 @@ function updateConfigFromStructuredFields() {
   config.inputs.orientation ??= {};
   config.tempo ??= {};
   config.madmom ??= {};
+  config.dome ??= {};
+  config.bar ??= {};
+  config.stage ??= {};
   writeOptionalString(config.inputs.audio, 'bind', configAudioBind?.value ?? '');
   writeOptionalString(config.inputs.audio, 'device_id', configAudioDeviceId?.value ?? '');
   writeOptionalString(config.inputs.midi, 'bind', configMidiBind?.value ?? '');
@@ -165,6 +254,21 @@ function updateConfigFromStructuredFields() {
   } else {
     delete config.madmom.audio_input_index;
   }
+  config.dome.enabled = Boolean(configDomeEnabled?.checked);
+  config.dome.simulation_enabled = Boolean(configDomeSimulationEnabled?.checked);
+  config.dome.opc_address = configDomeOpcAddress?.value?.trim() ?? '';
+  config.dome.brightness = numberOrFallback(configDomeBrightness?.value ?? '', config.dome.brightness ?? 0);
+  config.bar.enabled = Boolean(configBarEnabled?.checked);
+  config.bar.simulation_enabled = Boolean(configBarSimulationEnabled?.checked);
+  config.bar.infinity_length = integerOrFallback(configBarInfinityLength?.value ?? '', config.bar.infinity_length ?? 0);
+  config.bar.infinity_width = integerOrFallback(configBarInfinityWidth?.value ?? '', config.bar.infinity_width ?? 0);
+  config.bar.runner_length = integerOrFallback(configBarRunnerLength?.value ?? '', config.bar.runner_length ?? 0);
+  config.bar.brightness = numberOrFallback(configBarBrightness?.value ?? '', config.bar.brightness ?? 0);
+  config.stage.enabled = Boolean(configStageEnabled?.checked);
+  config.stage.simulation_enabled = Boolean(configStageSimulationEnabled?.checked);
+  config.stage.opc_address = configStageOpcAddress?.value?.trim() ?? '';
+  config.stage.brightness = numberOrFallback(configStageBrightness?.value ?? '', config.stage.brightness ?? 0);
+  config.stage.side_lengths = parseIntegerList(configStageSideLengths?.value ?? '', config.stage.side_lengths ?? []);
   configEditor.value = JSON.stringify(config, null, 2);
   updateStructuredConfigFields(config);
 }

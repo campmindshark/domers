@@ -28,7 +28,7 @@ node ui/check.mjs
 - Visualizer simulator-frame harness and frame-hash snapshots for live dome modes.
 - Server state contract for full config reload/apply, runtime config patching, palette patching, start/stop, metrics, input status, hardware status, and simulator frames.
 - HTTP adapter smoke coverage for UI, state, geometry, mapping, and start routes.
-- UI smoke markers for API/WebSocket wiring, pixel rendering, full palette controls, input status controls, and simulator controls.
+- UI smoke markers for API/WebSocket wiring, pixel rendering, full palette controls, structured config controls, input status controls, and simulator controls.
 - OPC loopback write and reconnect tests.
 
 Tests for intentional behavior changes cite
