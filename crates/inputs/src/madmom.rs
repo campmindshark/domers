@@ -2,6 +2,7 @@
 
 use std::{
     io,
+    path::{Path, PathBuf},
     process::{Child, ChildStdout, Command, Stdio},
 };
 
@@ -31,6 +32,26 @@ impl MadmomLaunchConfig {
             "online".to_string(),
         ]);
         args
+    }
+
+    /// Return the Spectrum-compatible working directory for Python launches.
+    ///
+    /// Spectrum starts `Madmom/env/Scripts/python.exe` with
+    /// `DBNBeatTracker ...` and sets the process working directory to the
+    /// Scripts folder. Without this, Python-style launches only work when the
+    /// operator happens to start the server from that directory.
+    #[must_use]
+    pub fn working_directory(&self) -> Option<PathBuf> {
+        self.tracker.as_ref()?;
+        let command = Path::new(&self.command);
+        let file_name = command.file_name()?.to_string_lossy().to_ascii_lowercase();
+        if file_name != "python" && file_name != "python.exe" && file_name != "python3" {
+            return None;
+        }
+        command
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .map(Path::to_path_buf)
     }
 }
 
@@ -73,6 +94,9 @@ impl MadmomSidecar {
         }
 
         let mut command = Command::new(&launch.command);
+        if let Some(working_directory) = launch.working_directory() {
+            command.current_dir(working_directory);
+        }
         command
             .args(launch.args())
             .stdout(Stdio::piped())
@@ -160,6 +184,31 @@ mod tests {
             config.args(),
             ["DBNBeatTracker", "--host_api", "--audio_input=5", "online"].map(String::from)
         );
+    }
+
+    #[test]
+    fn python_launch_uses_script_directory_as_working_directory() {
+        let config = MadmomLaunchConfig {
+            command: "/opt/spectrum/Madmom/env/Scripts/python.exe".to_string(),
+            tracker: Some("DBNBeatTracker".to_string()),
+            audio_input_index: Some(5),
+        };
+
+        assert_eq!(
+            config.working_directory().as_deref(),
+            Some(std::path::Path::new("/opt/spectrum/Madmom/env/Scripts"))
+        );
+    }
+
+    #[test]
+    fn pathless_python_launch_keeps_current_working_directory() {
+        let config = MadmomLaunchConfig {
+            command: "python3".to_string(),
+            tracker: Some("fake_tracker.py".to_string()),
+            audio_input_index: Some(5),
+        };
+
+        assert_eq!(config.working_directory(), None);
     }
 
     #[test]

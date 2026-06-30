@@ -65,8 +65,9 @@ python3 tools/check_visualizer_goldens.py
 ```
 
 `build_spectrum_csharp.py` is the Windows/.NET gate for executable Spectrum
-fixture capture. It builds `../spectrum/Spectrum/Spectrum.csproj` directly
-because the legacy solution references a missing `Madmom/Madmom.pyproj`.
+fixture capture. It initializes the Spectrum `Madmom` submodule if needed and
+builds `../spectrum/Spectrum/Spectrum.csproj` directly because the legacy
+solution's `Madmom/Madmom.pyproj` requires Visual Studio Python Tools.
 `check_visualizer_goldens.py` is expected to fail until C# frame hashes are
 captured.
 

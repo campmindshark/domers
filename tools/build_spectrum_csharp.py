@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build the legacy Spectrum C# project with Windows .NET.
 
-The checked-in solution still references a missing Madmom Python project, so
-the default gate builds the WPF entry project directly. This keeps C# fixture
-capture repeatable from WSL without requiring Visual Studio or administrator
-installation of the .NET SDK.
+The Spectrum solution includes a Madmom Python project supplied by the
+`campmindshark/madmom` submodule. Plain `dotnet build Spectrum.sln` cannot build
+that `.pyproj` without Visual Studio Python Tools, so the default fixture gate
+builds the WPF entry project directly while ensuring the submodule is present.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SPECTRUM = ROOT.parent / "spectrum"
 DEFAULT_PROJECT = SPECTRUM / "Spectrum" / "Spectrum.csproj"
+MADMOM_PROJECT = SPECTRUM / "Madmom" / "Madmom.pyproj"
 
 
 def parse_args() -> argparse.Namespace:
@@ -85,6 +86,18 @@ def quote_ps(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+def ensure_madmom_submodule() -> None:
+    if MADMOM_PROJECT.exists():
+        return
+    gitmodules = SPECTRUM / ".gitmodules"
+    if not gitmodules.exists() or "Madmom" not in gitmodules.read_text(encoding="utf-8"):
+        return
+    subprocess.run(
+        ["git", "-C", str(SPECTRUM), "submodule", "update", "--init", "Madmom"],
+        check=True,
+    )
+
+
 def default_windows_dotnet() -> str | None:
     env_dotnet = os.environ.get("SPECTRUM_DOTNET")
     if env_dotnet:
@@ -106,6 +119,7 @@ def local_dotnet(args_dotnet: Path | None) -> str:
 
 def main() -> int:
     args = parse_args()
+    ensure_madmom_submodule()
     project = args.project.resolve()
     if not project.exists():
         print(f"Spectrum project not found: {project}", file=sys.stderr)

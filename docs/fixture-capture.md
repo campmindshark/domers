@@ -14,9 +14,11 @@ Build the legacy C# project before any executable Spectrum fixture capture:
 python3 tools/build_spectrum_csharp.py
 ```
 
-The helper defaults to `../spectrum/Spectrum/Spectrum.csproj`. The full
-`Spectrum.sln` still references a missing `Madmom/Madmom.pyproj`, so the project
-build is the repeatable gate for the C# app and its referenced libraries.
+The helper defaults to `../spectrum/Spectrum/Spectrum.csproj` and initializes
+the Spectrum `Madmom` submodule if needed. The full `Spectrum.sln` includes
+`Madmom/Madmom.pyproj`, which requires Visual Studio Python Tools and is not
+buildable with plain `dotnet`, so the C# app project is the repeatable fixture
+gate.
 
 Check whether visualizer frame goldens are complete:
 

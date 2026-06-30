@@ -1243,7 +1243,11 @@ fn spawn_madmom_task(state: Arc<Mutex<ServerState>>, config: DomersConfig) -> Jo
             tracker: config.madmom.tracker,
             audio_input_index,
         };
-        let mut child = match Command::new(&launch.command)
+        let mut command = Command::new(&launch.command);
+        if let Some(working_directory) = launch.working_directory() {
+            command.current_dir(working_directory);
+        }
+        let mut child = match command
             .args(launch.args())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

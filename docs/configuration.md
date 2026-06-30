@@ -224,11 +224,13 @@ audio_input_index = 0
 The command can point at a bundled tracker executable, a wrapper script, a system
 install, a Docker sidecar launcher, or a native replacement. To mirror
 Spectrum's Python invocation, set `command` to Python and `tracker` to
-`DBNBeatTracker`:
+`DBNBeatTracker`. If `command` is a path to `python.exe`, `dome-rs` runs the
+sidecar from that executable's directory, matching Spectrum's
+`Madmom/env/Scripts` working-directory behavior:
 
 ```toml
 [madmom]
-command = "python.exe"
+command = "Madmom/env/Scripts/python.exe"
 tracker = "DBNBeatTracker"
 audio_input_index = 0
 ```
