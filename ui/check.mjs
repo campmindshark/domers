@@ -71,7 +71,7 @@ for (const marker of [
   'id="config-status"',
   'id="config-audio-bind"',
   'id="config-audio-native-enabled"',
-  'id="config-audio-device-id"',
+  '<select id="config-audio-device-id"',
   'id="config-midi-bind"',
   'id="config-midi-native-enabled"',
   'id="config-midi-device-id"',

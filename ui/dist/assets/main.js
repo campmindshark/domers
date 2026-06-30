@@ -7320,7 +7320,7 @@ function updateStructuredConfigFields(config) {
     configAudioNativeEnabled.checked = Boolean(config.inputs?.audio?.native_enabled);
   }
   if (configAudioDeviceId) {
-    configAudioDeviceId.value = config.inputs?.audio?.device_id ?? "";
+    renderAudioDeviceOptions(config.inputs?.audio ?? {});
   }
   if (configMidiBind) {
     configMidiBind.value = config.inputs?.midi?.bind ?? "";
@@ -7410,6 +7410,23 @@ function writeOptionalString(target, key, value) {
   } else {
     delete target[key];
   }
+}
+function renderAudioDeviceOptions(audioConfig) {
+  if (!configAudioDeviceId) {
+    return;
+  }
+  const selectedId = audioConfig.device_id ?? "";
+  const devices = (audioConfig.devices ?? []).filter((device) => device.flow === "capture");
+  configAudioDeviceId.replaceChildren();
+  configAudioDeviceId.append(new Option("Bridge / default input", ""));
+  for (const device of devices) {
+    const label = `${device.name || device.id} (${device.id})`;
+    configAudioDeviceId.append(new Option(label, device.id));
+  }
+  if (selectedId && !devices.some((device) => device.id === selectedId)) {
+    configAudioDeviceId.append(new Option(`Configured: ${selectedId}`, selectedId));
+  }
+  configAudioDeviceId.value = selectedId;
 }
 function numberOrFallback(value, fallback) {
   const trimmed = value.trim();
@@ -8360,9 +8377,9 @@ function ConfigEditor() {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Native CPAL capture" })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Device ID" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Optional native device identifier. Leave blank to use the bridge input." }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-audio-device-id", name: "configAudioDeviceId", type: "text", placeholder: "default input device" })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Audio device" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Choose a configured capture endpoint. Leave blank for bridge/default input." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { id: "config-audio-device-id", name: "configAudioDeviceId" })
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "config-card", "aria-label": "MIDI input config", children: [

@@ -174,9 +174,10 @@ ALSA development headers (for example `libasound2-dev`) before building with
 `native-capture`; macOS uses CoreAudio/CoreMIDI.
 
 `inputs.audio.devices` is optional. When present, it models Spectrum's audio
-enumeration rule: all active endpoints receive an index, but only capture
-devices are selectable. If `madmom.audio_input_index` is unset, `domers run`
-derives the Madmom/PortAudio index from `inputs.audio.device_id`.
+enumeration rule: all active endpoints receive an index, and capture endpoints
+populate the config editor's audio device dropdown. If
+`madmom.audio_input_index` is unset, `domers run` derives the Madmom/PortAudio
+index from `inputs.audio.device_id`.
 
 ## Level Drivers
 

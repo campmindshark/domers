@@ -132,7 +132,7 @@ function updateStructuredConfigFields(config) {
     configAudioNativeEnabled.checked = Boolean(config.inputs?.audio?.native_enabled);
   }
   if (configAudioDeviceId) {
-    configAudioDeviceId.value = config.inputs?.audio?.device_id ?? '';
+    renderAudioDeviceOptions(config.inputs?.audio ?? {});
   }
   if (configMidiBind) {
     configMidiBind.value = config.inputs?.midi?.bind ?? '';
@@ -226,6 +226,24 @@ function writeOptionalString(target, key, value) {
   } else {
     delete target[key];
   }
+}
+
+function renderAudioDeviceOptions(audioConfig) {
+  if (!configAudioDeviceId) {
+    return;
+  }
+  const selectedId = audioConfig.device_id ?? '';
+  const devices = (audioConfig.devices ?? []).filter(device => device.flow === 'capture');
+  configAudioDeviceId.replaceChildren();
+  configAudioDeviceId.append(new Option('Bridge / default input', ''));
+  for (const device of devices) {
+    const label = `${device.name || device.id} (${device.id})`;
+    configAudioDeviceId.append(new Option(label, device.id));
+  }
+  if (selectedId && !devices.some(device => device.id === selectedId)) {
+    configAudioDeviceId.append(new Option(`Configured: ${selectedId}`, selectedId));
+  }
+  configAudioDeviceId.value = selectedId;
 }
 
 function numberOrFallback(value, fallback) {

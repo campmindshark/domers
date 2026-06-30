@@ -51,9 +51,9 @@ function ConfigEditor() {
               <span>Native CPAL capture</span>
             </label>
             <label className="config-field">
-              <span className="config-field-label">Device ID</span>
-              <span className="field-hint">Optional native device identifier. Leave blank to use the bridge input.</span>
-              <input id="config-audio-device-id" name="configAudioDeviceId" type="text" placeholder="default input device" />
+              <span className="config-field-label">Audio device</span>
+              <span className="field-hint">Choose a configured capture endpoint. Leave blank for bridge/default input.</span>
+              <select id="config-audio-device-id" name="configAudioDeviceId" />
             </label>
           </section>
           <section className="config-card" aria-label="MIDI input config">
