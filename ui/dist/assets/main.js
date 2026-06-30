@@ -8659,18 +8659,22 @@ function OpcTargetsFooter() {
 }
 function ControlApp() {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("main", { "data-domers-app": true, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "MindShark Dome Control Panel" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { "aria-label": "Engine", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "start-engine", type: "button", children: "Start" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "stop-engine", type: "button", children: "Stop" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "engine-status", children: "stopped" })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { className: "app-shell-header", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", { children: "MindShark Dome Control Panel" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "engine-controls", "aria-label": "Engine", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "start-engine", type: "button", children: "Start" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "stop-engine", type: "button", children: "Stop" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "engine-status", children: "stopped" })
+      ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ConfigEditor, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RuntimeControls, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PaletteDrawer, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InputsDrawer, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DebugVisualsDrawer, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PreviewDrawer, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "app-shell-content", "aria-label": "Operator Drawers", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ConfigEditor, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RuntimeControls, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PaletteDrawer, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InputsDrawer, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DebugVisualsDrawer, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PreviewDrawer, {})
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(OpcTargetsFooter, {})
   ] });
 }

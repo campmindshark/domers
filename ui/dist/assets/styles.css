@@ -1,9 +1,51 @@
 /* domers/ui/src/styles.css */
+html,
+body {
+  min-height: 100%;
+}
 body {
   background: #111;
   color: #eee;
   font-family: system-ui, sans-serif;
+  margin: 0;
+}
+body:not([data-page=simulator]) {
+  height: 100vh;
+  overflow: hidden;
+}
+body[data-page=simulator] {
   margin: 1rem;
+}
+main[data-domers-app] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+}
+.app-shell-header {
+  align-items: center;
+  background: #111;
+  border-bottom: 1px solid #555;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+}
+.app-shell-header h1 {
+  font-size: 1.35rem;
+  margin: 0;
+}
+.engine-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.app-shell-content {
+  min-height: 0;
+  overflow: auto;
+  padding: 1rem;
 }
 a {
   color: #8cc8ff;
@@ -253,9 +295,10 @@ button:hover {
 }
 .opc-targets-footer {
   background: #111;
-  border: 1px solid #555;
+  border-top: 1px solid #555;
   box-sizing: border-box;
-  margin-top: 2rem;
+  max-height: 34vh;
+  overflow: auto;
   padding: 0.75rem 1rem;
 }
 .opc-targets-footer h2,

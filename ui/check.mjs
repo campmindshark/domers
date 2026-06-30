@@ -52,6 +52,8 @@ for (const marker of [
 
 for (const marker of [
   'data-domers-app',
+  'className="app-shell-header"',
+  'className="app-shell-content"',
   'aria-label="Runtime Controls"',
   'id="preview-drawer"',
   '<summary>Preview</summary>',
@@ -148,7 +150,8 @@ for (const marker of [
   'className="opc-targets-footer"',
   'max-width: calc(100vw - 2rem)',
   'width: 100%',
-  'margin-top: 2rem',
+  'grid-template-rows: auto minmax(0, 1fr) auto',
+  'overflow: auto',
   '.side-lengths-grid',
 ]) {
   if (!css.includes(marker) && !app.includes(marker)) {

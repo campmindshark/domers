@@ -417,18 +417,22 @@ function OpcTargetsFooter() {
 function ControlApp() {
   return (
     <main data-domers-app>
-      <h1>MindShark Dome Control Panel</h1>
-      <section aria-label="Engine">
-        <button id="start-engine" type="button">Start</button>
-        <button id="stop-engine" type="button">Stop</button>
-        <span id="engine-status">stopped</span>
-      </section>
-      <ConfigEditor />
-      <RuntimeControls />
-      <PaletteDrawer />
-      <InputsDrawer />
-      <DebugVisualsDrawer />
-      <PreviewDrawer />
+      <header className="app-shell-header">
+        <h1>MindShark Dome Control Panel</h1>
+        <section className="engine-controls" aria-label="Engine">
+          <button id="start-engine" type="button">Start</button>
+          <button id="stop-engine" type="button">Stop</button>
+          <span id="engine-status">stopped</span>
+        </section>
+      </header>
+      <div className="app-shell-content" aria-label="Operator Drawers">
+        <ConfigEditor />
+        <RuntimeControls />
+        <PaletteDrawer />
+        <InputsDrawer />
+        <DebugVisualsDrawer />
+        <PreviewDrawer />
+      </div>
       <OpcTargetsFooter />
     </main>
   );
