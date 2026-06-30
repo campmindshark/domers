@@ -30,8 +30,8 @@ function VisualizerSelect({ id, name }: { id: string; name: string }) {
 
 function ConfigEditor() {
   return (
-    <details id="config-drawer" className="config-drawer" aria-label="Config Editor">
-      <summary>Config Editor</summary>
+    <section id="config-drawer" className="config-drawer" aria-label="Config Editor">
+      <h2>Config Editor</h2>
       <p className="drawer-intro">
         Edit the full native configuration as JSON. Applying config restarts
         live input adapters when the engine is running.
@@ -228,7 +228,7 @@ function ConfigEditor() {
         <span className="config-field-label">Full JSON config</span>
         <textarea id="config-editor" className="config-editor" spellCheck={false} rows={16} />
       </label>
-    </details>
+    </section>
   );
 }
 
@@ -239,6 +239,16 @@ function RuntimeControls() {
       <label>
         Dome visualizer
         <VisualizerSelect id="dome-active-vis" name="domeActiveVis" />
+      </label>
+      <label>
+        Active palette
+        <select id="palette-index" name="colorPaletteIndex">
+          {Array.from({ length: 8 }, (_, index) => (
+            <option key={index} value={index}>
+              Palette {index + 1}
+            </option>
+          ))}
+        </select>
       </label>
       <label>
         Flash speed
@@ -253,27 +263,17 @@ function RuntimeControls() {
 
 function PaletteDrawer() {
   return (
-    <details id="palette-drawer" aria-label="Palettes">
-      <summary>Palettes</summary>
-      <label>
-        Active palette
-        <select id="palette-index" name="colorPaletteIndex">
-          {Array.from({ length: 8 }, (_, index) => (
-            <option key={index} value={index}>
-              Palette {index + 1}
-            </option>
-          ))}
-        </select>
-      </label>
+    <section id="palette-drawer" aria-label="Palettes">
+      <h2>Palettes</h2>
       <section id="palette-grid" aria-label="Palette colors" className="palette-grid" data-palette-editor="64-entry-gradient" />
-    </details>
+    </section>
   );
 }
 
-function InputsDrawer() {
+function InputsPanel() {
   return (
-    <details id="inputs-drawer" aria-label="Inputs">
-      <summary>Inputs</summary>
+    <section id="inputs-drawer" aria-label="Inputs">
+      <h2>Inputs</h2>
       <button id="tap-tempo" type="button">
         Tap Tempo
       </button>
@@ -292,14 +292,14 @@ function InputsDrawer() {
           <li>none</li>
         </ol>
       </section>
-    </details>
+    </section>
   );
 }
 
-function DebugVisualsDrawer() {
+function DebugVisualsPanel() {
   return (
-    <details id="debug-visuals-drawer" aria-label="Debug Visuals">
-      <summary>Debug Visuals</summary>
+    <section id="debug-visuals-drawer" aria-label="Debug Visuals">
+      <h2>Debug Visuals</h2>
       <label>
         Dome diagnostic
         <select id="dome-test-pattern" name="domeTestPattern">
@@ -324,7 +324,7 @@ function DebugVisualsDrawer() {
           <option value="1">Flash Colors</option>
         </select>
       </label>
-    </details>
+    </section>
   );
 }
 
@@ -357,11 +357,11 @@ function SimulatorFrameView({ streamText }: { streamText: string }) {
 
 function PreviewDrawer() {
   return (
-    <details id="preview-drawer">
-      <summary>Preview</summary>
+    <section id="preview-drawer" aria-label="Simulator Preview">
+      <h2>Simulator Preview</h2>
       <p><a href="/simulator">Open simulator sandbox</a></p>
-      <SimulatorFrameView streamText="stream disconnected" />
-    </details>
+      <SimulatorFrameView streamText="preview WebSocket disconnected" />
+    </section>
   );
 }
 
@@ -432,13 +432,27 @@ function ControlApp() {
           <span id="engine-status">stopped</span>
         </section>
       </header>
-      <div className="app-shell-content" aria-label="Operator Drawers">
-        <ConfigEditor />
-        <RuntimeControls />
-        <PaletteDrawer />
-        <InputsDrawer />
-        <DebugVisualsDrawer />
-        <PreviewDrawer />
+      <div className="app-shell-content" aria-label="Operator Tabs">
+        <nav className="operator-tabs" aria-label="Operator sections" role="tablist">
+          <button id="runtime-tab" className="operator-tab is-active" type="button" role="tab" aria-controls="runtime-panel" aria-selected="true" data-tab-target="runtime-panel">Runtime</button>
+          <button id="simulator-tab" className="operator-tab" type="button" role="tab" aria-controls="simulator-panel" aria-selected="false" data-tab-target="simulator-panel">Simulator</button>
+          <button id="palettes-tab" className="operator-tab" type="button" role="tab" aria-controls="palettes-panel" aria-selected="false" data-tab-target="palettes-panel">Palettes</button>
+          <button id="config-tab" className="operator-tab" type="button" role="tab" aria-controls="config-panel" aria-selected="false" data-tab-target="config-panel">Config</button>
+        </nav>
+        <section id="runtime-panel" className="operator-tab-panel is-active runtime-panel-grid" role="tabpanel" aria-labelledby="runtime-tab">
+          <RuntimeControls />
+          <InputsPanel />
+          <DebugVisualsPanel />
+        </section>
+        <section id="simulator-panel" className="operator-tab-panel" role="tabpanel" aria-labelledby="simulator-tab" hidden>
+          <PreviewDrawer />
+        </section>
+        <section id="palettes-panel" className="operator-tab-panel" role="tabpanel" aria-labelledby="palettes-tab" hidden>
+          <PaletteDrawer />
+        </section>
+        <section id="config-panel" className="operator-tab-panel" role="tabpanel" aria-labelledby="config-tab" hidden>
+          <ConfigEditor />
+        </section>
       </div>
       <OpcTargetsFooter />
     </main>

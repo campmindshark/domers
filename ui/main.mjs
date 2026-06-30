@@ -73,7 +73,8 @@ const sandboxPaletteSecondary = document.querySelector('#sandbox-palette-seconda
 const sandboxPaletteAccent = document.querySelector('#sandbox-palette-accent');
 const metricFrames = document.querySelector('#metric-frames');
 const metricSimulatorFrames = document.querySelector('#metric-simulator-frames');
-const previewDrawer = document.querySelector('#preview-drawer');
+const tabButtons = Array.from(document.querySelectorAll('[data-tab-target]'));
+const tabPanels = Array.from(document.querySelectorAll('.operator-tab-panel'));
 const canvas = document.querySelector('#dome-simulator');
 const context = canvas?.getContext('2d');
 const barSimulator = document.querySelector('#bar-simulator');
@@ -237,13 +238,31 @@ function renderAudioDeviceOptions(audioConfig) {
   configAudioDeviceId.replaceChildren();
   configAudioDeviceId.append(new Option('Bridge / default input', ''));
   for (const device of devices) {
-    const label = `${device.name || device.id} (${device.id})`;
-    configAudioDeviceId.append(new Option(label, device.id));
+    const label = audioDeviceLabel(device);
+    const option = new Option(label, device.id);
+    option.title = device.id;
+    configAudioDeviceId.append(option);
   }
   if (selectedId && !devices.some(device => device.id === selectedId)) {
     configAudioDeviceId.append(new Option(`Configured: ${selectedId}`, selectedId));
   }
   configAudioDeviceId.value = selectedId;
+}
+
+function audioDeviceLabel(device) {
+  const name = device.name?.trim() || 'Unnamed capture device';
+  const id = device.id?.trim() || '';
+  if (!id || id === name) {
+    return name;
+  }
+  return `${name} — ${shortDeviceId(id)}`;
+}
+
+function shortDeviceId(id) {
+  const withoutBraces = id.replace(/[{}]/g, '');
+  const parts = withoutBraces.split(/[.:-]+/).filter(Boolean);
+  const suffix = parts.at(-1) ?? withoutBraces;
+  return suffix.length > 12 ? `…${suffix.slice(-12)}` : suffix;
 }
 
 function numberOrFallback(value, fallback) {
@@ -977,6 +996,25 @@ function updateSandboxControlLabels() {
   }
 }
 
+async function activateOperatorTab(targetId) {
+  for (const button of tabButtons) {
+    const isActive = button.dataset.tabTarget === targetId;
+    button.classList.toggle('is-active', isActive);
+    button.setAttribute('aria-selected', String(isActive));
+  }
+  for (const panel of tabPanels) {
+    const isActive = panel.id === targetId;
+    panel.classList.toggle('is-active', isActive);
+    panel.hidden = !isActive;
+  }
+
+  if (targetId === 'simulator-panel') {
+    await ensureSimulatorStarted();
+  } else if (!isDedicatedSimulatorPage) {
+    stopSimulatorPreview();
+  }
+}
+
 async function ensureSimulatorStarted() {
   if (simulatorStarted || !canvas) {
     return;
@@ -1005,7 +1043,7 @@ function stopSimulatorPreview() {
     simulatorSocket = undefined;
   }
   if (streamStatus) {
-    streamStatus.textContent = 'stream disconnected';
+    streamStatus.textContent = 'preview WebSocket disconnected';
   }
 }
 
@@ -1017,12 +1055,12 @@ function connectSimulatorStream() {
   const socket = new WebSocket(`${scheme}://${window.location.host}/ws/simulator`);
   simulatorSocket = socket;
   if (streamStatus) {
-    streamStatus.textContent = 'stream connecting';
+    streamStatus.textContent = 'preview WebSocket connecting';
   }
 
   socket.addEventListener('open', () => {
     if (streamStatus) {
-      streamStatus.textContent = 'stream connected';
+      streamStatus.textContent = 'preview WebSocket connected';
     }
   });
 
@@ -1033,7 +1071,7 @@ function connectSimulatorStream() {
   socket.addEventListener('close', () => {
     simulatorSocket = undefined;
     if (streamStatus) {
-      streamStatus.textContent = 'stream disconnected';
+      streamStatus.textContent = 'preview WebSocket disconnected';
     }
     if (simulatorStarted) {
       window.setTimeout(connectSimulatorStream, 1000);
@@ -1136,13 +1174,11 @@ for (const input of [
   input?.addEventListener('input', refreshSandboxFrame);
 }
 
-previewDrawer?.addEventListener('toggle', async () => {
-  if (previewDrawer.open) {
-    await ensureSimulatorStarted();
-  } else {
-    stopSimulatorPreview();
-  }
-});
+for (const button of tabButtons) {
+  button.addEventListener('click', async () => {
+    await activateOperatorTab(button.dataset.tabTarget);
+  });
+}
 
 window.addEventListener('resize', redrawLatestSimulatorFrame);
 
