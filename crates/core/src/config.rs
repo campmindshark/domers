@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::color::{ColorPalette, PaletteEntry};
 use crate::migration::{analyze_spectrum_xml, MigrationReport};
 
 /// Minimal engine configuration used by the initial scheduler/output tests.
@@ -19,6 +20,8 @@ pub struct EngineConfig {
     pub color_palette_index: u8,
     /// Beat flash blackout speed, matching Spectrum's `flashSpeed`.
     pub flash_speed: f64,
+    /// Active runtime color palette.
+    pub color_palette: ColorPalette,
 }
 
 /// Native Domers application config.
@@ -32,6 +35,9 @@ pub struct DomersConfig {
     pub stage: StageConfig,
     /// Tempo source config.
     pub tempo: TempoConfig,
+    /// Spectrum-compatible runtime color palette.
+    #[serde(default)]
+    pub color_palette: ColorPalette,
     /// Madmom sidecar config.
     pub madmom: MadmomConfig,
 }
@@ -137,6 +143,7 @@ impl Default for EngineConfig {
             dome_test_pattern: 0,
             color_palette_index: 0,
             flash_speed: 0.0,
+            color_palette: ColorPalette::default(),
         }
     }
 }
@@ -173,6 +180,7 @@ impl Default for DomersConfig {
                 source: TempoSource::Human,
                 flash_speed: 0.0,
             },
+            color_palette: ColorPalette::default(),
             madmom: MadmomConfig {
                 command: "DBNBeatTracker".to_string(),
                 audio_input_index: None,
@@ -190,6 +198,7 @@ impl From<&DomersConfig> for EngineConfig {
             dome_test_pattern: config.dome.test_pattern,
             color_palette_index: 0,
             flash_speed: config.tempo.flash_speed,
+            color_palette: config.color_palette.clone(),
         }
     }
 }
@@ -257,6 +266,7 @@ pub fn import_spectrum_xml(xml: &str) -> ImportedConfig {
         _ => TempoSource::Human,
     };
     config.tempo.flash_speed = f64_tag(xml, "flashSpeed").unwrap_or(config.tempo.flash_speed);
+    config.color_palette = color_palette(xml);
 
     ImportedConfig { config, report }
 }
@@ -302,8 +312,33 @@ fn stage_side_lengths(xml: &str) -> Vec<u32> {
         .unwrap_or_default()
 }
 
+fn color_palette(xml: &str) -> ColorPalette {
+    let Some(block) = tag_value(xml, "colors") else {
+        return ColorPalette::default();
+    };
+
+    let colors = block
+        .split("<LEDColor>")
+        .skip(1)
+        .filter_map(|chunk| chunk.split("</LEDColor>").next())
+        .map(|entry| {
+            let color1 = u32_tag(entry, "color1").unwrap_or(0);
+            let color2 = u32_tag(entry, "color2").unwrap_or(0);
+            if bool_tag(entry, "color2Enabled").unwrap_or(false) {
+                PaletteEntry::gradient(color1, color2)
+            } else {
+                PaletteEntry::solid(color1)
+            }
+        })
+        .collect();
+
+    ColorPalette { colors }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::color::{ColorPalette, PaletteEntry};
+
     use super::{import_spectrum_xml, DomersConfig, TempoSource};
 
     #[test]
@@ -325,6 +360,11 @@ mod tests {
         assert_eq!(imported.config.bar.infinity_length, 50);
         assert_eq!(imported.config.stage.side_lengths.len(), 48);
         assert_eq!(imported.config.tempo.source, TempoSource::Human);
+        assert_eq!(imported.config.color_palette.colors.len(), 64);
+        assert_eq!(
+            imported.config.color_palette.colors[0],
+            PaletteEntry::gradient(0xff_00_00, 0xff_00_00)
+        );
         assert!(imported.report.warnings.len() >= 5);
     }
 
@@ -370,5 +410,6 @@ mod tests {
         assert_eq!(engine.dome_test_pattern, 2);
         assert_eq!(engine.color_palette_index, 0);
         assert!((engine.flash_speed - config.tempo.flash_speed).abs() < f64::EPSILON);
+        assert_eq!(engine.color_palette.colors.len(), ColorPalette::ENTRY_COUNT);
     }
 }
