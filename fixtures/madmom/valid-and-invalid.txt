@@ -1,0 +1,4 @@
+BEAT:0.000
+BEAT:0.500
+noise
+BEAT:not-a-number
