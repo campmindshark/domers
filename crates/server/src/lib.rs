@@ -547,7 +547,7 @@ impl ServerState {
 
     /// Record a human tap-tempo event at the current runtime timestamp.
     pub fn tap_tempo(&mut self) {
-        self.tap_tempo_at(self.input_now_ms());
+        self.tap_tempo_at(self.now_ms());
     }
 
     /// Record a human tap-tempo event at a known timestamp.
@@ -785,7 +785,6 @@ impl ServerState {
 
     /// Produce one deterministic simulator frame for the selected visualizer.
     pub fn simulator_frame(&mut self) -> OperatorCommandFrame {
-        self.metrics.frames = self.metrics.frames.saturating_add(1);
         self.metrics.simulator_frames = self.metrics.simulator_frames.saturating_add(1);
         self.operator_frame()
     }
@@ -826,19 +825,20 @@ impl ServerState {
         }
     }
 
-    fn now_ms(&self) -> u64 {
-        self.metrics.frames.saturating_mul(2_500) / 1_000
-    }
-
     #[allow(
         clippy::cast_possible_truncation,
-        reason = "Input uptime only needs millisecond precision for a single server process"
+        reason = "Runtime uptime only needs millisecond precision for a single server process"
     )]
-    fn input_now_ms(&self) -> u64 {
+    fn now_ms(&self) -> u64 {
         self.input_epoch
             .elapsed()
             .as_millis()
             .min(u128::from(u64::MAX)) as u64
+    }
+
+    #[cfg(test)]
+    fn set_now_ms_for_test(&mut self, now_ms: u64) {
+        self.input_epoch = Instant::now() - Duration::from_millis(now_ms);
     }
 
     fn prune_input_state(&mut self) {
@@ -2809,7 +2809,7 @@ mod tests {
             .dome
             .iter()
             .any(|command| matches!(command, DomeCommand::Frame(_))));
-        assert_eq!(state.metrics().frames, 1);
+        assert_eq!(state.metrics().frames, 0);
         assert_eq!(state.metrics().simulator_frames, 1);
     }
 
@@ -2855,14 +2855,32 @@ mod tests {
             color_palette_index: None,
         });
         state.start();
+        state.set_now_ms_for_test(0);
         state.engine_frame();
         let first = state.operator_frame().dome;
-        for _ in 0..100 {
-            state.engine_frame();
-        }
+        state.set_now_ms_for_test(250);
         let second = state.operator_frame().dome;
 
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn preview_frames_do_not_advance_engine_time_or_beat_phase() {
+        let mut state = ServerState::default();
+        state.tap_tempo_at(0);
+        state.tap_tempo_at(500);
+        state.tap_tempo_at(1_000);
+        state.set_now_ms_for_test(1_250);
+        let before = state.snapshot().inputs.beat_progress;
+
+        for _ in 0..10 {
+            let _ = state.simulator_frame();
+        }
+
+        let after = state.snapshot().inputs.beat_progress;
+        assert_eq!(state.metrics().frames, 0);
+        assert_eq!(state.metrics().simulator_frames, 10);
+        assert!((after - before).abs() < 0.01);
     }
 
     #[test]

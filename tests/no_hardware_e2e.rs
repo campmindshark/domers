@@ -33,7 +33,7 @@ fn no_hardware_server_migration_and_simulator_smoke() {
             .any(|command| matches!(command, DomeCommand::Flush)));
     }
 
-    assert_eq!(server.metrics().frames, 60);
+    assert_eq!(server.metrics().frames, 0);
     assert_eq!(server.metrics().simulator_frames, 60);
 }
 
