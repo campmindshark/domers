@@ -97,8 +97,6 @@ pub struct SimulatorControls {
     pub beat_progress: f64,
     /// Whether the flash overlay is active.
     pub flash_active: bool,
-    /// Selected operator palette slot.
-    pub palette_index: u8,
     /// Primary palette color encoded as `0xRRGGBB`.
     pub primary: u32,
     /// Secondary palette color encoded as `0xRRGGBB`.
@@ -113,7 +111,6 @@ impl Default for SimulatorControls {
             volume: 0.7,
             beat_progress: 0.25,
             flash_active: true,
-            palette_index: 0,
             primary: 0x00_ff_00,
             secondary: 0x00_80_ff,
             accent: 0xff_40_80,
@@ -153,7 +150,6 @@ impl ServerState {
                 volume: 0.7,
                 beat_progress: 0.25,
                 flash_active: true,
-                palette_index: 0,
                 primary: 0x00_ff_00,
                 secondary: 0x00_80_ff,
                 accent: 0xff_40_80,
@@ -172,9 +168,17 @@ impl ServerState {
         self.config.clone()
     }
 
-    /// Patch the active dome visualizer.
-    pub fn patch_dome_active_vis(&mut self, dome_active_vis: u8) {
-        self.config.dome_active_vis = dome_active_vis;
+    /// Patch dome runtime configuration.
+    pub fn patch_dome_config(&mut self, patch: DomeConfigPatch) {
+        if let Some(active_visualizer) = patch.active_visualizer {
+            self.config.dome_active_vis = active_visualizer;
+        }
+        if let Some(flash_speed) = patch.flash_speed {
+            self.config.flash_speed = flash_speed.clamp(0.0, 32.0);
+        }
+        if let Some(color_palette_index) = patch.color_palette_index {
+            self.config.color_palette_index = color_palette_index.min(7);
+        }
     }
 
     /// Patch simulator input controls.
@@ -187,9 +191,6 @@ impl ServerState {
         }
         if let Some(flash_active) = patch.flash_active {
             self.simulator.flash_active = flash_active;
-        }
-        if let Some(palette_index) = patch.palette_index {
-            self.simulator.palette_index = palette_index.min(7);
         }
         if let Some(primary) = patch.primary {
             self.simulator.primary = primary & 0x00ff_ffff;
@@ -336,12 +337,9 @@ impl AppRuntime {
         }
     }
 
-    /// Patch the active dome visualizer.
-    pub async fn patch_dome_active_vis(&self, dome_active_vis: u8) {
-        self.state
-            .lock()
-            .await
-            .patch_dome_active_vis(dome_active_vis);
+    /// Patch dome runtime configuration.
+    pub async fn patch_dome_config(&self, patch: DomeConfigPatch) {
+        self.state.lock().await.patch_dome_config(patch);
     }
 
     /// Patch simulator input controls.
@@ -417,8 +415,14 @@ pub async fn serve_listener(listener: TcpListener, config: EngineConfig) -> std:
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
-struct DomeConfigPatch {
-    active_visualizer: Option<u8>,
+/// Runtime dome config patch payload.
+pub struct DomeConfigPatch {
+    /// Active dome visualizer index.
+    pub active_visualizer: Option<u8>,
+    /// Beat flash blackout speed.
+    pub flash_speed: Option<f64>,
+    /// Active color palette slot.
+    pub color_palette_index: Option<u8>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -430,8 +434,6 @@ pub struct SimulatorControlsPatch {
     pub beat_progress: Option<f64>,
     /// Whether the flash overlay is active.
     pub flash_active: Option<bool>,
-    /// Selected operator palette slot.
-    pub palette_index: Option<u8>,
     /// Primary palette color encoded as `0xRRGGBB`.
     pub primary: Option<u32>,
     /// Secondary palette color encoded as `0xRRGGBB`.
@@ -491,9 +493,7 @@ async fn patch_dome_config(
     State(runtime): State<AppRuntime>,
     Json(patch): Json<DomeConfigPatch>,
 ) -> Json<ServerSnapshot> {
-    if let Some(active_visualizer) = patch.active_visualizer {
-        runtime.patch_dome_active_vis(active_visualizer).await;
-    }
+    runtime.patch_dome_config(patch).await;
     Json(runtime.snapshot().await)
 }
 
@@ -573,12 +573,18 @@ mod tests {
     fn patches_config_and_streams_simulator_frame() {
         let mut state = ServerState::default();
         state.start();
-        state.patch_dome_active_vis(1);
+        state.patch_dome_config(super::DomeConfigPatch {
+            active_visualizer: Some(1),
+            flash_speed: Some(8.0),
+            color_palette_index: Some(4),
+        });
 
         let frame = state.simulator_frame();
 
         assert!(state.running());
         assert_eq!(state.config().dome_active_vis, 1);
+        assert!((state.config().flash_speed - 8.0).abs() < f64::EPSILON);
+        assert_eq!(state.config().color_palette_index, 4);
         assert!(frame
             .iter()
             .any(|command| matches!(command, DomeCommand::Frame(_))));
@@ -593,7 +599,6 @@ mod tests {
             volume: Some(0.25),
             beat_progress: Some(0.75),
             flash_active: Some(false),
-            palette_index: Some(3),
             primary: Some(0xff_00_00),
             secondary: Some(0x00_ff_00),
             accent: Some(0x00_00_ff),
@@ -604,7 +609,6 @@ mod tests {
         assert!((snapshot.simulator.volume - 0.25).abs() < f32::EPSILON);
         assert!((snapshot.simulator.beat_progress - 0.75).abs() < f64::EPSILON);
         assert!(!snapshot.simulator.flash_active);
-        assert_eq!(snapshot.simulator.palette_index, 3);
         assert_eq!(snapshot.simulator.primary, 0xff_00_00);
         assert_eq!(snapshot.simulator.secondary, 0x00_ff_00);
         assert_eq!(snapshot.simulator.accent, 0x00_00_ff);
@@ -696,7 +700,11 @@ mod tests {
     #[test]
     fn stop_updates_running_state_without_dropping_config() {
         let mut state = ServerState::default();
-        state.patch_dome_active_vis(7);
+        state.patch_dome_config(super::DomeConfigPatch {
+            active_visualizer: Some(7),
+            flash_speed: None,
+            color_palette_index: None,
+        });
         state.start();
         state.stop();
 

@@ -1,6 +1,6 @@
 use domers_core::{WarningKind, analyze_spectrum_xml};
 use domers_outputs::DomeCommand;
-use domers_server::ServerState;
+use domers_server::{DomeConfigPatch, ServerState};
 
 #[test]
 fn no_hardware_server_migration_and_simulator_smoke() {
@@ -11,7 +11,11 @@ fn no_hardware_server_migration_and_simulator_smoke() {
 
     let mut server = ServerState::default();
     server.start();
-    server.patch_dome_active_vis(1);
+    server.patch_dome_config(DomeConfigPatch {
+        active_visualizer: Some(1),
+        flash_speed: None,
+        color_palette_index: None,
+    });
 
     for _ in 0..60 {
         let frame = server.simulator_frame();

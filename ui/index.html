@@ -50,7 +50,9 @@
         <span id="engine-status">stopped</span>
         <span id="stream-status">stream disconnected</span>
       </section>
-      <section aria-label="Dome Controls">
+      <section aria-label="Runtime Controls">
+        <h2>Runtime Controls</h2>
+        <p>These controls update the active engine configuration used by hardware output and the simulator.</p>
         <label>
           Dome visualizer
           <select id="dome-active-vis" name="domeActiveVis">
@@ -70,6 +72,23 @@
           <output id="flash-speed-value" for="flash-speed">0</output>
         </label>
         <label>
+          Runtime palette slot
+          <select id="palette-index" name="colorPaletteIndex">
+            <option value="0">Palette 1</option>
+            <option value="1">Palette 2</option>
+            <option value="2">Palette 3</option>
+            <option value="3">Palette 4</option>
+            <option value="4">Palette 5</option>
+            <option value="5">Palette 6</option>
+            <option value="6">Palette 7</option>
+            <option value="7">Palette 8</option>
+          </select>
+        </label>
+      </section>
+      <section aria-label="Simulator Preview Inputs">
+        <h2>Simulator Preview Inputs</h2>
+        <p>These inputs fake live audio, beat, and palette colors until the matching runtime sources are connected.</p>
+        <label>
           Audio volume preview
           <input id="sim-volume" name="simVolume" type="range" min="0" max="1" step="0.01" value="0.7" />
           <output id="sim-volume-value" for="sim-volume">0.7</output>
@@ -81,20 +100,7 @@
         </label>
         <label>
           <input id="sim-flash-active" name="simFlashActive" type="checkbox" checked />
-          Flash overlay active
-        </label>
-        <label>
-          Palette slot
-          <select id="palette-index" name="colorPaletteIndex">
-            <option value="0">Palette 1</option>
-            <option value="1">Palette 2</option>
-            <option value="2">Palette 3</option>
-            <option value="3">Palette 4</option>
-            <option value="4">Palette 5</option>
-            <option value="5">Palette 6</option>
-            <option value="6">Palette 7</option>
-            <option value="7">Palette 8</option>
-          </select>
+          Flash overlay active preview
         </label>
         <fieldset>
           <legend>Palette colors</legend>

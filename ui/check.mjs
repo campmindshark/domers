@@ -30,6 +30,8 @@ for (const path of required) {
 const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
 for (const marker of [
   'data-domers-app',
+  'aria-label="Runtime Controls"',
+  'aria-label="Simulator Preview Inputs"',
   'id="start-engine"',
   'id="stop-engine"',
   'name="domeActiveVis"',

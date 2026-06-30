@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::migration::{analyze_spectrum_xml, MigrationReport};
 
 /// Minimal engine configuration used by the initial scheduler/output tests.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct EngineConfig {
     /// Whether the dome hardware path is enabled.
     pub dome_enabled: bool,
@@ -15,6 +15,10 @@ pub struct EngineConfig {
     pub dome_active_vis: u8,
     /// Dome diagnostic pattern.
     pub dome_test_pattern: u8,
+    /// Active color palette slot, matching Spectrum's `colorPaletteIndex`.
+    pub color_palette_index: u8,
+    /// Beat flash blackout speed, matching Spectrum's `flashSpeed`.
+    pub flash_speed: f64,
 }
 
 /// Native Domers application config.
@@ -131,6 +135,8 @@ impl Default for EngineConfig {
             dome_simulation_enabled: true,
             dome_active_vis: 0,
             dome_test_pattern: 0,
+            color_palette_index: 0,
+            flash_speed: 0.0,
         }
     }
 }
@@ -182,6 +188,8 @@ impl From<&DomersConfig> for EngineConfig {
             dome_simulation_enabled: config.dome.simulation_enabled,
             dome_active_vis: config.dome.active_visualizer,
             dome_test_pattern: config.dome.test_pattern,
+            color_palette_index: 0,
+            flash_speed: config.tempo.flash_speed,
         }
     }
 }
@@ -360,5 +368,7 @@ mod tests {
         assert!(!engine.dome_simulation_enabled);
         assert_eq!(engine.dome_active_vis, 3);
         assert_eq!(engine.dome_test_pattern, 2);
+        assert_eq!(engine.color_palette_index, 0);
+        assert!((engine.flash_speed - config.tempo.flash_speed).abs() < f64::EPSILON);
     }
 }

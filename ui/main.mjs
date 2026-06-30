@@ -48,12 +48,14 @@ function updateSnapshot(snapshot) {
   metricFrames.textContent = String(snapshot.metrics.frames);
   metricSimulatorFrames.textContent = String(snapshot.metrics.simulator_frames);
   activeVisualizer.value = String(snapshot.config.dome_active_vis);
+  flashSpeed.value = String(snapshot.config.flash_speed);
+  flashSpeedValue.textContent = String(snapshot.config.flash_speed);
+  paletteIndex.value = String(snapshot.config.color_palette_index);
   simVolume.value = String(snapshot.simulator.volume);
   simVolumeValue.textContent = String(snapshot.simulator.volume);
   simBeatProgress.value = String(snapshot.simulator.beat_progress);
   simBeatProgressValue.textContent = String(snapshot.simulator.beat_progress);
   simFlashActive.checked = snapshot.simulator.flash_active;
-  paletteIndex.value = String(snapshot.simulator.palette_index);
   palettePrimary.value = toColorInput(snapshot.simulator.primary);
   paletteSecondary.value = toColorInput(snapshot.simulator.secondary);
   paletteAccent.value = toColorInput(snapshot.simulator.accent);
@@ -226,10 +228,22 @@ async function patchSimulatorControls() {
       volume: Number(simVolume.value),
       beat_progress: Number(simBeatProgress.value),
       flash_active: simFlashActive.checked,
-      palette_index: Number(paletteIndex.value),
       primary: fromColorInput(palettePrimary.value),
       secondary: fromColorInput(paletteSecondary.value),
       accent: fromColorInput(paletteAccent.value),
+    }),
+  });
+  updateSnapshot(snapshot);
+  handleSimulatorFrame(await request('/api/simulator/frame'));
+}
+
+async function patchRuntimeControls() {
+  const snapshot = await request('/api/config/dome', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      active_visualizer: Number(activeVisualizer.value),
+      flash_speed: Number(flashSpeed.value),
+      color_palette_index: Number(paletteIndex.value),
     }),
   });
   updateSnapshot(snapshot);
@@ -263,25 +277,17 @@ document.querySelector('#stop-engine')?.addEventListener('click', async () => {
   updateSnapshot(await request('/api/stop', { method: 'POST' }));
 });
 
-activeVisualizer?.addEventListener('change', async () => {
-  updateSnapshot(
-    await request('/api/config/dome', {
-      method: 'PATCH',
-      body: JSON.stringify({ active_visualizer: Number(activeVisualizer.value) }),
-    }),
-  );
-  handleSimulatorFrame(await request('/api/simulator/frame'));
-});
-
-flashSpeed?.addEventListener('input', () => {
-  flashSpeedValue.textContent = flashSpeed.value;
-});
+for (const input of [activeVisualizer, flashSpeed, paletteIndex]) {
+  input?.addEventListener('input', async () => {
+    flashSpeedValue.textContent = flashSpeed.value;
+    await patchRuntimeControls();
+  });
+}
 
 for (const input of [
   simVolume,
   simBeatProgress,
   simFlashActive,
-  paletteIndex,
   palettePrimary,
   paletteSecondary,
   paletteAccent,
