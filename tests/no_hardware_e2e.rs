@@ -1,10 +1,12 @@
-use domers_core::{WarningKind, analyze_spectrum_xml};
+//! No-hardware integration smoke for migration and simulator runtime behavior.
+
+use domers_core::{analyze_spectrum_xml, WarningKind};
 use domers_outputs::DomeCommand;
 use domers_server::{DomeConfigPatch, ServerState};
 
 #[test]
 fn no_hardware_server_migration_and_simulator_smoke() {
-    let xml = include_str!("../../fixtures/config/spectrum_default_config.xml");
+    let xml = include_str!("../fixtures/config/spectrum_default_config.xml");
     let report = analyze_spectrum_xml(xml);
     assert!(report.contains(WarningKind::StaleField, "kickT"));
     assert!(report.contains(WarningKind::InvalidMidiBindingTarget, "snareT"));
@@ -19,7 +21,9 @@ fn no_hardware_server_migration_and_simulator_smoke() {
 
     for _ in 0..60 {
         let frame = server.simulator_frame();
-        assert!(frame.iter().any(|command| matches!(command, DomeCommand::Flush)));
+        assert!(frame
+            .iter()
+            .any(|command| matches!(command, DomeCommand::Flush)));
     }
 
     assert_eq!(server.metrics().frames, 60);

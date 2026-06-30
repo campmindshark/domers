@@ -234,18 +234,17 @@ pub fn import_spectrum_xml(xml: &str) -> ImportedConfig {
     let mut config = DomersConfig::default();
 
     config.dome.enabled = bool_tag(xml, "domeEnabled").unwrap_or(config.dome.enabled);
-    config.dome.simulation_enabled =
-        bool_tag(xml, "domeSimulationEnabled").unwrap_or(config.dome.simulation_enabled);
-    config.dome.opc_address =
-        string_tag(xml, "domeBeagleboneOPCAddress").unwrap_or(config.dome.opc_address);
+    config.dome.simulation_enabled = true;
+    config.dome.opc_address = string_tag(xml, "domeBeagleboneOPCAddress")
+        .map(|address| localhost_opc_address(&address))
+        .unwrap_or(config.dome.opc_address);
     config.dome.active_visualizer =
         u8_tag(xml, "domeActiveVis").unwrap_or(config.dome.active_visualizer);
     config.dome.test_pattern = u8_tag(xml, "domeTestPattern").unwrap_or(config.dome.test_pattern);
     config.dome.brightness = f64_tag(xml, "domeBrightness").unwrap_or(config.dome.brightness);
 
     config.bar.enabled = bool_tag(xml, "barEnabled").unwrap_or(config.bar.enabled);
-    config.bar.simulation_enabled =
-        bool_tag(xml, "barSimulationEnabled").unwrap_or(config.bar.simulation_enabled);
+    config.bar.simulation_enabled = config.bar.enabled;
     config.bar.infinity_width =
         u32_tag(xml, "barInfinityWidth").unwrap_or(config.bar.infinity_width);
     config.bar.infinity_length =
@@ -255,10 +254,10 @@ pub fn import_spectrum_xml(xml: &str) -> ImportedConfig {
     config.bar.test_pattern = u8_tag(xml, "barTestPattern").unwrap_or(config.bar.test_pattern);
 
     config.stage.enabled = bool_tag(xml, "stageEnabled").unwrap_or(config.stage.enabled);
-    config.stage.simulation_enabled =
-        bool_tag(xml, "stageSimulationEnabled").unwrap_or(config.stage.simulation_enabled);
-    config.stage.opc_address =
-        string_tag(xml, "stageBeagleboneOPCAddress").unwrap_or(config.stage.opc_address);
+    config.stage.simulation_enabled = config.stage.enabled;
+    config.stage.opc_address = string_tag(xml, "stageBeagleboneOPCAddress")
+        .map(|address| localhost_opc_address(&address))
+        .unwrap_or(config.stage.opc_address);
     config.stage.side_lengths = stage_side_lengths(xml);
     config.stage.brightness = f64_tag(xml, "stageBrightness").unwrap_or(config.stage.brightness);
     config.stage.test_pattern =
@@ -271,8 +270,21 @@ pub fn import_spectrum_xml(xml: &str) -> ImportedConfig {
     };
     config.tempo.flash_speed = f64_tag(xml, "flashSpeed").unwrap_or(config.tempo.flash_speed);
     config.color_palette = color_palette(xml);
+    config.color_palette_index =
+        u8_tag(xml, "colorPaletteIndex").unwrap_or(config.color_palette_index);
 
     ImportedConfig { config, report }
+}
+
+fn localhost_opc_address(address: &str) -> String {
+    let mut parts = address.split(':');
+    let _host = parts.next();
+    let port = parts.next().unwrap_or("7890");
+    let channel = parts.next();
+    match channel {
+        Some(channel) => format!("127.0.0.1:{port}:{channel}"),
+        None => format!("127.0.0.1:{port}"),
+    }
 }
 
 fn tag_value<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
@@ -360,10 +372,15 @@ mod tests {
         let imported = import_spectrum_xml(xml);
 
         assert!(imported.config.dome.enabled);
+        assert!(imported.config.dome.simulation_enabled);
+        assert_eq!(imported.config.dome.opc_address, "127.0.0.1:7890");
         assert_eq!(imported.config.dome.active_visualizer, 0);
+        assert!(imported.config.bar.enabled);
+        assert!(imported.config.bar.simulation_enabled);
         assert_eq!(imported.config.bar.infinity_length, 50);
         assert_eq!(imported.config.stage.side_lengths.len(), 48);
         assert_eq!(imported.config.tempo.source, TempoSource::Human);
+        assert_eq!(imported.config.color_palette_index, 7);
         assert_eq!(imported.config.color_palette.colors.len(), 64);
         assert_eq!(
             imported.config.color_palette.colors[0],
@@ -394,7 +411,7 @@ mod tests {
 
     #[test]
     fn domers_config_maps_to_engine_config() {
-        let config = DomersConfig {
+        let mut config = DomersConfig {
             dome: super::DomeConfig {
                 enabled: true,
                 simulation_enabled: false,
@@ -405,6 +422,7 @@ mod tests {
             },
             ..DomersConfig::default()
         };
+        config.color_palette_index = 6;
 
         let engine = super::EngineConfig::from(&config);
 
@@ -412,7 +430,7 @@ mod tests {
         assert!(!engine.dome_simulation_enabled);
         assert_eq!(engine.dome_active_vis, 3);
         assert_eq!(engine.dome_test_pattern, 2);
-        assert_eq!(engine.color_palette_index, 0);
+        assert_eq!(engine.color_palette_index, 6);
         assert!((engine.flash_speed - config.tempo.flash_speed).abs() < f64::EPSILON);
         assert_eq!(engine.color_palette.colors.len(), ColorPalette::ENTRY_COUNT);
     }
