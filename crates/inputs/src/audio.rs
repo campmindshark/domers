@@ -22,9 +22,17 @@ impl VolumeReplay {
     }
 }
 
+/// Parse one live audio volume payload.
+#[must_use]
+pub fn parse_volume_payload(payload: &[u8]) -> Option<f32> {
+    let text = std::str::from_utf8(payload).ok()?.trim();
+    let volume = text.parse::<f32>().ok()?;
+    Some(volume.clamp(0.0, 1.0))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::VolumeReplay;
+    use super::{parse_volume_payload, VolumeReplay};
 
     #[test]
     fn replays_clamped_volume_samples() {
@@ -33,5 +41,12 @@ mod tests {
         assert_eq!(replay.next_volume(), Some(0.25));
         assert_eq!(replay.next_volume(), Some(1.0));
         assert_eq!(replay.next_volume(), None);
+    }
+
+    #[test]
+    fn parses_live_volume_payloads() {
+        assert_eq!(parse_volume_payload(b"0.25\n"), Some(0.25));
+        assert_eq!(parse_volume_payload(b"2.0"), Some(1.0));
+        assert_eq!(parse_volume_payload(b"noise"), None);
     }
 }

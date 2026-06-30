@@ -8,12 +8,22 @@ M0 captures C# references before Rust behavior is trusted.
 python3 tools/extract_spectrum_fixtures.py
 ```
 
+Check whether visualizer frame goldens are complete:
+
+```sh
+python3 tools/check_visualizer_goldens.py
+```
+
+This check intentionally fails while any visualizer case has
+`expected.status != "captured"` or a null `expected.value`.
+
 Generated fixture groups:
 
 - `fixtures/spectrum-csharp/dome_mapping.json`
 - `fixtures/spectrum-csharp/dome_geometry.json`
 - `fixtures/spectrum-csharp/bar_stage_topology.json`
 - `fixtures/spectrum-csharp/opc_packets/`
+- `fixtures/spectrum-csharp/visualizer_frame_cases.json`
 - `fixtures/config/spectrum_default_config.xml`
 - `fixtures/orientation/datagram_lengths.json`
 - `fixtures/madmom/valid-and-invalid.txt`
@@ -24,6 +34,10 @@ Generated fixture groups:
 - Dome projection points and simulator coordinates.
 - Bar and stage topology.
 - OPC packet bytes for single-pixel, sparse, and full-frame writes.
+- Source-traceable visualizer frame cases for every used Spectrum visualizer.
+- Captured Spectrum frame hashes for every visualizer case, produced on a
+  Windows/.NET machine that can execute the Spectrum WPF-targeted project or an
+  equivalent headless capture runner.
 - Default and edge XML configs.
 - Orientation datagram examples.
 - Madmom stdout examples.

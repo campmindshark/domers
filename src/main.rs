@@ -72,6 +72,7 @@ fn assert_bind_available(bind_addr: SocketAddr) -> Result<(), Box<dyn Error>> {
 fn validate_madmom_command(config: &DomersConfig) -> Result<(), Box<dyn Error>> {
     let launch = MadmomLaunchConfig {
         command: config.madmom.command.clone(),
+        tracker: config.madmom.tracker.clone(),
         audio_input_index: config.madmom.audio_input_index,
     };
     let status = Command::new(&launch.command).arg("--help").status();

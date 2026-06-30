@@ -78,6 +78,20 @@ test_pattern = 0
 source = "human"
 flash_speed = 0.0
 
+[inputs.audio]
+
+[[inputs.midi.bindings]]
+command_kind = "note"
+index = 64
+action = "flash"
+
+[[inputs.midi.bindings]]
+command_kind = "control_change"
+index = 1
+action = "volume"
+
+[inputs.orientation]
+
 [color_palette]
 banks = [
     [

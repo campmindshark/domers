@@ -2,7 +2,7 @@
 
 use std::{
     io,
-    process::{Child, Command, Stdio},
+    process::{Child, ChildStdout, Command, Stdio},
 };
 
 /// Config needed to launch the Madmom sidecar.
@@ -10,6 +10,8 @@ use std::{
 pub struct MadmomLaunchConfig {
     /// Sidecar executable or command name.
     pub command: String,
+    /// Optional tracker/script argument, e.g. `DBNBeatTracker` when command is Python.
+    pub tracker: Option<String>,
     /// Audio input index passed to `DBNBeatTracker`.
     pub audio_input_index: Option<u32>,
 }
@@ -19,11 +21,16 @@ impl MadmomLaunchConfig {
     #[must_use]
     pub fn args(&self) -> Vec<String> {
         let audio_input_index = self.audio_input_index.unwrap_or(0);
-        vec![
+        let mut args = Vec::new();
+        if let Some(tracker) = &self.tracker {
+            args.push(tracker.clone());
+        }
+        args.extend([
             "--host_api".to_string(),
             format!("--audio_input={audio_input_index}"),
             "online".to_string(),
-        ]
+        ]);
+        args
     }
 }
 
@@ -73,6 +80,11 @@ impl MadmomSidecar {
             .stdin(Stdio::null());
         self.child = Some(command.spawn()?);
         Ok(())
+    }
+
+    /// Take the child stdout pipe for line-based beat ingestion.
+    pub fn take_stdout(&mut self) -> Option<ChildStdout> {
+        self.child.as_mut()?.stdout.take()
     }
 
     /// Stop and drop the child process.
@@ -126,6 +138,7 @@ mod tests {
     fn builds_spectrum_compatible_launch_args() {
         let config = MadmomLaunchConfig {
             command: "DBNBeatTracker".to_string(),
+            tracker: None,
             audio_input_index: Some(5),
         };
 
@@ -136,10 +149,25 @@ mod tests {
     }
 
     #[test]
+    fn builds_spectrum_python_launch_args() {
+        let config = MadmomLaunchConfig {
+            command: "python.exe".to_string(),
+            tracker: Some("DBNBeatTracker".to_string()),
+            audio_input_index: Some(5),
+        };
+
+        assert_eq!(
+            config.args(),
+            ["DBNBeatTracker", "--host_api", "--audio_input=5", "online"].map(String::from)
+        );
+    }
+
+    #[test]
     fn disabled_sidecar_records_launch_without_spawning() {
         let mut sidecar = MadmomSidecar::default();
         let config = MadmomLaunchConfig {
             command: "DBNBeatTracker".to_string(),
+            tracker: None,
             audio_input_index: Some(2),
         };
 

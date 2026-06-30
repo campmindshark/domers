@@ -8,6 +8,9 @@ Hardware validation gates release tags. Complete this checklist after the automa
 - Confirm `cargo clippy --workspace --all-targets -- -D warnings` passes.
 - Confirm UI smoke check passes.
 - Confirm `no_hardware_server_migration_and_simulator_smoke` passes.
+- Confirm `hardware_outputs_send_mapped_dome_frame_to_loopback_opc` passes.
+- Confirm `hardware_outputs_reconnect_after_loopback_opc_returns` passes.
+- Confirm `runtime_udp_input_adapters_feed_live_state` passes.
 - Confirm `domers doctor --config domers.toml --bind 127.0.0.1:3000` passes with the hardware config.
 - Record commit SHA, operator laptop OS, and fixture capture date.
 
@@ -53,6 +56,7 @@ TODO: Add image of expected stage side/layer diagnostic.
 - Verify audio volume input with the show audio device.
 - Verify Madmom sidecar beat parsing against the selected input.
 - Verify orientation devices on UDP port 5005.
+- Verify the **Inputs** drawer shows audio, MIDI, orientation, and Madmom event counters increasing with no last error.
 
 TODO: Add image of expected input status panel.
 
@@ -63,7 +67,7 @@ TODO: Add image of expected input status panel.
 ## Network And Recovery
 
 - Verify OPC reconnect after controller restart or cable interruption.
-- Verify the controls page **OPC Targets** panel shows the expected addresses, `connected`, increasing frame counts, and no last error while output is running.
+- Verify the controls page floating **OPC Targets** footer shows the expected addresses, `connected`, increasing frame counts, and no last error while output is running.
 - Verify server start/stop from browser UI.
 - Verify simulator frame stream remains responsive during a 60-second run.
 

@@ -8,15 +8,22 @@ const flashSpeedValue = document.querySelector('#flash-speed-value');
 const domeTestPattern = document.querySelector('#dome-test-pattern');
 const barTestPattern = document.querySelector('#bar-test-pattern');
 const stageTestPattern = document.querySelector('#stage-test-pattern');
+const configEditor = document.querySelector('#config-editor');
+const configStatus = document.querySelector('#config-status');
 const simVolume = document.querySelector('#sim-volume');
 const simVolumeValue = document.querySelector('#sim-volume-value');
 const simBeatProgress = document.querySelector('#sim-beat-progress');
 const simBeatProgressValue = document.querySelector('#sim-beat-progress-value');
 const simFlashActive = document.querySelector('#sim-flash-active');
 const paletteIndex = document.querySelector('#palette-index');
-const palettePrimary = document.querySelector('#palette-primary');
-const paletteSecondary = document.querySelector('#palette-secondary');
-const paletteAccent = document.querySelector('#palette-accent');
+const paletteGrid = document.querySelector('#palette-grid');
+let paletteControls = [];
+const inputAudio = document.querySelector('#input-audio');
+const inputMidi = document.querySelector('#input-midi');
+const inputOrientation = document.querySelector('#input-orientation');
+const inputMadmom = document.querySelector('#input-madmom');
+const orientationDevices = document.querySelector('#orientation-devices');
+const midiLog = document.querySelector('#midi-log');
 const sandboxActiveVisualizer = document.querySelector('#sandbox-dome-active-vis');
 const sandboxVolume = document.querySelector('#sandbox-volume');
 const sandboxVolumeValue = document.querySelector('#sandbox-volume-value');
@@ -31,6 +38,8 @@ const metricSimulatorFrames = document.querySelector('#metric-simulator-frames')
 const previewDrawer = document.querySelector('#preview-drawer');
 const canvas = document.querySelector('#dome-simulator');
 const context = canvas?.getContext('2d');
+const barSimulator = document.querySelector('#bar-simulator');
+const stageSimulator = document.querySelector('#stage-simulator');
 const isDedicatedSimulatorPage = document.body?.dataset.page === 'simulator';
 const SPECTRUM_CANVAS_SIZE = 750;
 const SPECTRUM_PROJECTION_OFFSET = 10;
@@ -40,6 +49,8 @@ let domeLedPoints = [];
 let latestSimulatorFrame;
 let simulatorStarted = false;
 let simulatorSocket;
+
+renderPaletteEditor();
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -61,6 +72,39 @@ async function loadDomeLayout() {
   rebuildDomeLedPoints();
 }
 
+async function loadFullConfig() {
+  if (!configEditor) {
+    return;
+  }
+  const config = await request('/api/config');
+  configEditor.value = JSON.stringify(config, null, 2);
+  if (configStatus) {
+    configStatus.textContent = 'loaded';
+  }
+}
+
+async function applyFullConfig() {
+  if (!configEditor) {
+    return;
+  }
+  let config;
+  try {
+    config = JSON.parse(configEditor.value);
+  } catch (error) {
+    if (configStatus) {
+      configStatus.textContent = `invalid JSON: ${error.message}`;
+    }
+    return;
+  }
+  updateSnapshot(await request('/api/config', {
+    method: 'PATCH',
+    body: JSON.stringify(config),
+  }));
+  if (configStatus) {
+    configStatus.textContent = 'applied';
+  }
+}
+
 function updateSnapshot(snapshot) {
   if (status) {
     status.textContent = snapshot.running ? 'running' : 'stopped';
@@ -73,6 +117,7 @@ function updateSnapshot(snapshot) {
   }
   updateHardwareStatus(hardwareDome, snapshot.hardware?.dome);
   updateHardwareStatus(hardwareStage, snapshot.hardware?.stage);
+  updateInputStatus(snapshot.inputs);
   if (activeVisualizer) {
     activeVisualizer.value = String(snapshot.config.dome_active_vis);
   }
@@ -109,15 +154,7 @@ function updateSnapshot(snapshot) {
   if (simFlashActive) {
     simFlashActive.checked = snapshot.simulator.flash_active;
   }
-  if (palettePrimary) {
-    palettePrimary.value = toColorInput(paletteColor(snapshot, 0));
-  }
-  if (paletteSecondary) {
-    paletteSecondary.value = toColorInput(paletteColor(snapshot, 1));
-  }
-  if (paletteAccent) {
-    paletteAccent.value = toColorInput(paletteColor(snapshot, 2));
-  }
+  updatePaletteInputs(snapshot);
 }
 
 function updateHardwareStatus(element, target) {
@@ -137,6 +174,81 @@ function updateHardwareStatus(element, target) {
   element.textContent = `${address} - ${state}, ${frames}${error}`;
 }
 
+function updateInputStatus(inputs) {
+  if (!inputs) {
+    return;
+  }
+  updateInputAdapterStatus(inputAudio, inputs.audio_adapter, `volume ${inputs.volume ?? 'n/a'}`);
+  updateInputAdapterStatus(inputMidi, inputs.midi_adapter, `${inputs.midi_commands ?? 0} commands`);
+  updateInputAdapterStatus(
+    inputOrientation,
+    inputs.orientation_adapter,
+    `${inputs.orientation_devices?.length ?? 0} devices, last ${inputs.last_orientation ?? 'none'}`,
+  );
+  updateInputAdapterStatus(inputMadmom, inputs.madmom_adapter, `${inputs.madmom_beats ?? 0} beats`);
+  updateOrientationDevices(inputs.orientation_devices ?? []);
+  updateMidiLog(inputs.midi_log ?? []);
+}
+
+function updateInputAdapterStatus(element, adapter, detail) {
+  if (!element || !adapter) {
+    return;
+  }
+  if (!adapter.enabled) {
+    element.textContent = 'disabled';
+    return;
+  }
+  const target = adapter.target ?? 'configured';
+  const error = adapter.last_error ? ` - last error: ${adapter.last_error}` : '';
+  element.textContent = `${target} - ${adapter.events ?? 0} events, ${detail}${error}`;
+}
+
+function updateOrientationDevices(devices) {
+  if (!orientationDevices) {
+    return;
+  }
+  orientationDevices.replaceChildren();
+  if (!devices.length) {
+    const item = document.createElement('li');
+    item.textContent = 'none';
+    orientationDevices.append(item);
+    return;
+  }
+  for (const device of devices) {
+    const item = document.createElement('li');
+    const rotation = device.current_rotation ?? {};
+    const speed = device.has_speed ? `, speed ${formatNumber(device.avg_distance_short)}` : '';
+    item.textContent = `#${device.device_id} ${device.kind} action ${device.action_flag} rotation (${formatNumber(rotation.x)}, ${formatNumber(rotation.y)}, ${formatNumber(rotation.z)}, ${formatNumber(rotation.w)})${speed}`;
+    orientationDevices.append(item);
+  }
+}
+
+function updateMidiLog(entries) {
+  if (!midiLog) {
+    return;
+  }
+  midiLog.replaceChildren();
+  if (!entries.length) {
+    const item = document.createElement('li');
+    item.textContent = 'none';
+    midiLog.append(item);
+    return;
+  }
+  for (const entry of entries.slice(-8).reverse()) {
+    const item = document.createElement('li');
+    const actions = entry.actions?.length ? entry.actions.join(', ') : 'no binding';
+    item.textContent = `${entry.timestamp_ms}ms ${entry.kind} ${entry.index}=${formatNumber(entry.value)} -> ${actions}`;
+    midiLog.append(item);
+  }
+}
+
+function formatNumber(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 'n/a';
+  }
+  return value.toFixed(3);
+}
+
 function toColorInput(color) {
   return `#${color.toString(16).padStart(6, '0')}`;
 }
@@ -145,9 +257,87 @@ function fromColorInput(color) {
   return Number.parseInt(color.replace('#', ''), 16);
 }
 
-function paletteColor(snapshot, relativeIndex) {
-  const absoluteIndex = snapshot.config.color_palette_index * 8 + relativeIndex;
+function paletteColor(snapshot, paletteSlot, relativeIndex) {
+  const absoluteIndex = paletteSlot * 8 + relativeIndex;
   return snapshot.config.color_palette.colors[absoluteIndex]?.color1 ?? 0;
+}
+
+function renderPaletteEditor() {
+  if (!paletteGrid) {
+    return;
+  }
+  paletteGrid.textContent = '';
+  paletteControls = [];
+  for (let paletteSlot = 0; paletteSlot < 8; paletteSlot += 1) {
+    const card = document.createElement('fieldset');
+    card.className = 'palette-card';
+    const legend = document.createElement('legend');
+    legend.textContent = `Palette ${paletteSlot + 1}`;
+    card.append(legend);
+    for (let colorIndex = 0; colorIndex < 8; colorIndex += 1) {
+      const entry = document.createElement('div');
+      entry.className = 'palette-entry';
+      const title = document.createElement('strong');
+      title.textContent = `Color ${colorIndex + 1}${colorIndex === 2 ? ' / flash' : ''}`;
+      const color1 = paletteInput(paletteSlot, colorIndex, 'color1');
+      const color2 = paletteInput(paletteSlot, colorIndex, 'color2');
+      const gradient = document.createElement('input');
+      gradient.type = 'checkbox';
+      gradient.id = `palette-${paletteSlot + 1}-color-${colorIndex + 1}-gradient`;
+      gradient.dataset.paletteIndex = String(paletteSlot);
+      gradient.dataset.colorIndex = String(colorIndex);
+      const gradientLabel = document.createElement('label');
+      gradientLabel.append('Gradient ', gradient);
+      entry.append(
+        title,
+        labelWithText('Color 1', color1),
+        labelWithText('Color 2', color2),
+        gradientLabel,
+      );
+      card.append(entry);
+      paletteControls.push({ color1, color2, gradient });
+    }
+    paletteGrid.append(card);
+  }
+}
+
+function paletteInput(paletteSlot, colorIndex, role) {
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = '#000000';
+  input.id = `palette-${paletteSlot + 1}-color-${colorIndex + 1}-${role}`;
+  input.dataset.paletteIndex = String(paletteSlot);
+  input.dataset.colorIndex = String(colorIndex);
+  input.dataset.paletteRole = role;
+  return input;
+}
+
+function labelWithText(text, input) {
+  const label = document.createElement('label');
+  label.append(text, input);
+  return label;
+}
+
+function updatePaletteInputs(snapshot) {
+  for (const control of paletteControls) {
+    const entry = paletteEntry(
+      snapshot,
+      Number(control.color1.dataset.paletteIndex),
+      Number(control.color1.dataset.colorIndex),
+    );
+    control.color1.value = toColorInput(entry.color1 ?? 0);
+    control.color2.value = toColorInput(entry.color2 ?? entry.color1 ?? 0);
+    control.gradient.checked = entry.color2_enabled ?? false;
+  }
+}
+
+function paletteEntry(snapshot, paletteSlot, relativeIndex) {
+  const absoluteIndex = paletteSlot * 8 + relativeIndex;
+  return snapshot.config.color_palette.colors[absoluteIndex] ?? {
+    color1: 0,
+    color2: 0,
+    color2_enabled: false,
+  };
 }
 
 function clearCanvas() {
@@ -298,6 +488,35 @@ function handleSimulatorFrame(frame) {
       drawPixel(command);
     }
   }
+  updateCommandList(barSimulator, frame.bar_commands ?? [], formatBarCommand);
+  updateCommandList(stageSimulator, frame.stage_commands ?? [], formatStageCommand);
+}
+
+function updateCommandList(element, commands, formatter) {
+  if (!element) {
+    return;
+  }
+  element.replaceChildren();
+  const visible = commands.filter(command => command.kind !== 'flush').slice(0, 24);
+  if (!visible.length) {
+    const item = document.createElement('li');
+    item.textContent = 'none';
+    element.append(item);
+    return;
+  }
+  for (const command of visible) {
+    const item = document.createElement('li');
+    item.textContent = formatter(command);
+    element.append(item);
+  }
+}
+
+function formatBarCommand(command) {
+  return `${command.is_runner ? 'runner' : 'bar'} led ${command.led_index} ${toColorInput(command.color)}`;
+}
+
+function formatStageCommand(command) {
+  return `side ${command.side_index} layer ${command.layer_index} led ${command.led_index} ${toColorInput(command.color)}`;
 }
 
 async function refreshState() {
@@ -347,13 +566,17 @@ async function patchDiagnosticControls() {
   await refreshPreviewFrame();
 }
 
-async function patchPaletteColor(relativeIndex, colorInput) {
+async function patchPaletteColor(control) {
+  const paletteSlot = Number(control.color1.dataset.paletteIndex);
+  const relativeIndex = Number(control.color1.dataset.colorIndex);
   const snapshot = await request('/api/config/palette', {
     method: 'PATCH',
     body: JSON.stringify({
+      color_palette_index: paletteSlot,
       relative_index: relativeIndex,
-      color1: fromColorInput(colorInput.value),
-      color2_enabled: false,
+      color1: fromColorInput(control.color1.value),
+      color2: fromColorInput(control.color2.value),
+      color2_enabled: control.gradient.checked,
     }),
   });
   updateSnapshot(snapshot);
@@ -470,6 +693,23 @@ document.querySelector('#stop-engine')?.addEventListener('click', async () => {
   updateSnapshot(await request('/api/stop', { method: 'POST' }));
 });
 
+document.querySelector('#reload-config')?.addEventListener('click', loadFullConfig);
+
+document.querySelector('#apply-config')?.addEventListener('click', async () => {
+  await applyFullConfig();
+  await refreshPreviewFrame();
+});
+
+document.querySelector('#tap-tempo')?.addEventListener('click', async () => {
+  updateSnapshot(await request('/api/input/tap', { method: 'POST' }));
+  await refreshPreviewFrame();
+});
+
+document.querySelector('#orientation-calibrate')?.addEventListener('click', async () => {
+  updateSnapshot(await request('/api/input/orientation/calibrate', { method: 'POST' }));
+  await refreshPreviewFrame();
+});
+
 for (const input of [activeVisualizer, flashSpeed, paletteIndex]) {
   input?.addEventListener('input', async () => {
     if (flashSpeedValue) {
@@ -483,14 +723,12 @@ for (const input of [domeTestPattern, barTestPattern, stageTestPattern]) {
   input?.addEventListener('input', patchDiagnosticControls);
 }
 
-for (const [relativeIndex, input] of [
-  [0, palettePrimary],
-  [1, paletteSecondary],
-  [2, paletteAccent],
-]) {
-  input?.addEventListener('input', async () => {
-    await patchPaletteColor(relativeIndex, input);
-  });
+for (const control of paletteControls) {
+  for (const input of [control.color1, control.color2, control.gradient]) {
+    input.addEventListener('input', async () => {
+      await patchPaletteColor(control);
+    });
+  }
 }
 
 for (const input of [
@@ -532,6 +770,7 @@ previewDrawer?.addEventListener('toggle', async () => {
 window.addEventListener('resize', redrawLatestSimulatorFrame);
 
 await refreshState();
+await loadFullConfig();
 if (isDedicatedSimulatorPage) {
   await ensureSimulatorStarted();
 }

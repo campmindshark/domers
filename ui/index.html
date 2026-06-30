@@ -10,6 +10,7 @@
         color: #eee;
         font-family: system-ui, sans-serif;
         margin: 1rem;
+        padding-bottom: 9rem;
       }
       canvas {
         aspect-ratio: 1 / 1;
@@ -49,6 +50,25 @@
         gap: 0.75rem;
         grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
       }
+      .palette-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+      }
+      .palette-card {
+        border: 1px solid #444;
+        padding: 0.75rem;
+      }
+      .palette-card h3 {
+        margin: 0 0 0.5rem;
+      }
+      .palette-entry {
+        border-top: 1px solid #333;
+        padding: 0.5rem 0;
+      }
+      .palette-entry:first-of-type {
+        border-top: 0;
+      }
       .status-grid {
         display: grid;
         gap: 0.75rem;
@@ -61,6 +81,35 @@
       .target-status strong {
         display: block;
       }
+      .config-editor {
+        background: #050505;
+        border: 1px solid #555;
+        color: #eee;
+        box-sizing: border-box;
+        display: block;
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        margin-top: 0.75rem;
+        width: 100%;
+      }
+      .device-list {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      .opc-targets-footer {
+        background: rgba(17, 17, 17, 0.95);
+        border-top: 1px solid #555;
+        bottom: 0;
+        box-shadow: 0 -0.25rem 1rem rgba(0, 0, 0, 0.35);
+        box-sizing: border-box;
+        left: 0;
+        padding: 0.75rem 1rem;
+        position: fixed;
+        right: 0;
+        z-index: 10;
+      }
+      .opc-targets-footer h2,
+      .opc-targets-footer p {
+        margin: 0.25rem 0;
+      }
     </style>
   </head>
   <body>
@@ -71,20 +120,16 @@
         <button id="stop-engine" type="button">Stop</button>
         <span id="engine-status">stopped</span>
       </section>
-      <section aria-label="OPC Targets">
-        <h2>OPC Targets</h2>
-        <p>Shows the configured hardware targets and whether the server is successfully writing OPC frames.</p>
-        <div class="status-grid">
-          <p class="target-status">
-            <strong>Dome / Bar</strong>
-            <span id="hardware-dome">disabled</span>
-          </p>
-          <p class="target-status">
-            <strong>Stage</strong>
-            <span id="hardware-stage">disabled</span>
-          </p>
+      <details id="config-drawer" aria-label="Config Editor">
+        <summary>Config Editor</summary>
+        <p>Edit the full native configuration as JSON. Applying config restarts live input adapters when the engine is running.</p>
+        <div>
+          <button id="reload-config" type="button">Reload Config</button>
+          <button id="apply-config" type="button">Apply Config</button>
+          <span id="config-status">not loaded</span>
         </div>
-      </section>
+        <textarea id="config-editor" class="config-editor" spellcheck="false" rows="16"></textarea>
+      </details>
       <section aria-label="Runtime Controls">
         <h2>Runtime Controls</h2>
         <p>These controls update the active engine configuration used by hardware output and the simulator.</p>
@@ -107,8 +152,12 @@
           <input id="flash-speed" name="flashSpeed" type="range" min="0" max="8" step="0.125" value="0" />
           <output id="flash-speed-value" for="flash-speed">0</output>
         </label>
+      </section>
+      <details id="palette-drawer" aria-label="Palettes">
+        <summary>Palettes</summary>
+        <p>Select the active palette, or edit any palette slot directly. The drawer shows all eight Spectrum palette banks at once.</p>
         <label>
-          Runtime palette slot
+          Active palette
           <select id="palette-index" name="colorPaletteIndex">
             <option value="0">Palette 1</option>
             <option value="1">Palette 2</option>
@@ -120,24 +169,43 @@
             <option value="7">Palette 8</option>
           </select>
         </label>
-        <fieldset>
-          <legend>Runtime palette colors</legend>
-          <div class="swatches">
-            <label>
-              Color 1
-              <input id="palette-primary" name="palettePrimary" type="color" value="#00ff00" />
-            </label>
-            <label>
-              Color 2
-              <input id="palette-secondary" name="paletteSecondary" type="color" value="#0080ff" />
-            </label>
-            <label>
-              Color 3 / flash
-              <input id="palette-accent" name="paletteAccent" type="color" value="#ff4080" />
-            </label>
-          </div>
-        </fieldset>
-      </section>
+        <section id="palette-grid" aria-label="Palette colors" class="palette-grid" data-palette-editor="64-entry-gradient"></section>
+      </details>
+      <details id="inputs-drawer" aria-label="Inputs">
+        <summary>Inputs</summary>
+        <button id="tap-tempo" type="button">Tap Tempo</button>
+        <button id="orientation-calibrate" type="button">Calibrate Orientation</button>
+        <div class="status-grid">
+          <p class="target-status">
+            <strong>Audio</strong>
+            <span id="input-audio">disabled</span>
+          </p>
+          <p class="target-status">
+            <strong>MIDI</strong>
+            <span id="input-midi">disabled</span>
+          </p>
+          <p class="target-status">
+            <strong>Orientation</strong>
+            <span id="input-orientation">disabled</span>
+          </p>
+          <p class="target-status">
+            <strong>Madmom</strong>
+            <span id="input-madmom">disabled</span>
+          </p>
+        </div>
+        <section aria-label="Orientation Devices">
+          <h3>Orientation Devices</h3>
+          <ul id="orientation-devices" class="device-list">
+            <li>none</li>
+          </ul>
+        </section>
+        <section aria-label="MIDI Log">
+          <h3>MIDI Log</h3>
+          <ol id="midi-log" class="device-list">
+            <li>none</li>
+          </ol>
+        </section>
+      </details>
       <details id="debug-visuals-drawer" aria-label="Debug Visuals">
         <summary>Debug Visuals</summary>
         <p>Debug visuals are hardware-check patterns. Dome debug visuals override the selected dome visualizer while active.</p>
@@ -176,9 +244,30 @@
         </section>
         <section aria-label="Simulator">
           <canvas id="dome-simulator" width="750" height="750" data-frame-source="websocket"></canvas>
+          <h3>Bar Simulator</h3>
+          <ol id="bar-simulator" class="device-list">
+            <li>none</li>
+          </ol>
+          <h3>Stage Simulator</h3>
+          <ol id="stage-simulator" class="device-list">
+            <li>none</li>
+          </ol>
         </section>
       </details>
     </main>
+    <footer class="opc-targets-footer" aria-label="OPC Targets">
+      <h2>OPC Targets</h2>
+      <div class="status-grid">
+        <p class="target-status">
+          <strong>Dome / Bar</strong>
+          <span id="hardware-dome">disabled</span>
+        </p>
+        <p class="target-status">
+          <strong>Stage</strong>
+          <span id="hardware-stage">disabled</span>
+        </p>
+      </div>
+    </footer>
     <script type="module" src="./main.mjs"></script>
   </body>
 </html>

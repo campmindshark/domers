@@ -6,7 +6,8 @@
 
 - Browser control page served by the Rust binary at `/`.
 - Dedicated simulator page served at `/simulator`.
-- Runtime controls for engine start/stop, active dome visualizer, flash speed, active palette slot, and runtime palette colors.
+- Runtime controls for engine start/stop, active dome visualizer, flash speed, active palette slot, and full palette colors/gradients.
+- Inputs drawer for tap tempo plus audio, MIDI, orientation, and Madmom adapter status.
 - Debug Visuals drawer for dome, bar, and stage hardware-check patterns.
 - Live Preview drawer that mirrors the runtime frame stream used for hardware output.
 - Independent `/simulator` sandbox with local controls that do not change runtime config or hardware output.
@@ -14,8 +15,8 @@
 - Spectrum-compatible dome topology and projection data for the full 7,580-LED dome layout.
 - Spectrum-compatible OPC packet encoding.
 - Native TOML configuration with a Spectrum XML import command and shared-entry palette format.
-- Core input support for MIDI replay, audio volume replay, orientation datagram classification, tap tempo, and Madmom `BEAT:{seconds}` protocol parsing.
-- Managed Madmom sidecar launch wrapper using `DBNBeatTracker --host_api --audio_input=<index> online`.
+- Core input support for MIDI/audio UDP adapters, orientation datagram ingestion, tap tempo, and Madmom `BEAT:{seconds}` protocol parsing.
+- Managed Madmom sidecar lifecycle using `DBNBeatTracker --host_api --audio_input=<index> online`.
 
 ## Quick Start
 
@@ -47,7 +48,7 @@ Check config, bind address, OPC address syntax, and Madmom command availability 
 cargo run --bin domers -- doctor --config domers.toml --bind 127.0.0.1:3000
 ```
 
-Then start with the same config, click `Start`, and check the **OPC Targets** panel on the controls page. It shows each configured target address, enabled state, TCP connection state, successful frame count, and the last connection/write error.
+Then start with the same config, click `Start`, and check the floating **OPC Targets** footer on the controls page. It shows each configured target address, enabled state, TCP connection state, successful frame count, and the last connection/write error.
 
 ## Configuration
 
@@ -77,7 +78,7 @@ See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette 
 - `POST /api/stop`: stop the engine loop
 - `PATCH /api/config/dome`: update dome runtime controls
 - `PATCH /api/config/diagnostics`: update dome, bar, and stage diagnostic/test-pattern controls
-- `PATCH /api/config/palette`: update one runtime palette color
+- `PATCH /api/config/palette`: update one runtime palette entry, including gradients
 - `POST /api/input/tap`: record one tap-tempo input
 - `GET /api/dome/geometry`: dome projection geometry
 - `GET /api/dome/mapping`: dome strut and LED mapping
@@ -111,5 +112,5 @@ node ui/check.mjs
 TODO: Add image of the MindShark Dome Control Panel page here.
 
 - Capture: full browser window at desktop size.
-- Expected: title, start/stop buttons, OPC Targets panel, runtime controls, metrics, stream status, and a closed Preview drawer are visible.
+- Expected: title, start/stop buttons, floating OPC Targets footer, runtime controls, metrics, stream status, and a closed Preview drawer are visible.
 - Suggested file: `docs/images/readme-operator-shell.png`.

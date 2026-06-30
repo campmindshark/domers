@@ -15,7 +15,7 @@ domers-outputs = { path = "../outputs" }
 domers-visualizers = { path = "../visualizers" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
-tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "time", "sync", "net"] }
+tokio = { version = "1.52.3", features = ["io-util", "macros", "process", "rt-multi-thread", "time", "sync", "net"] }
 
 [lints]
 workspace = true

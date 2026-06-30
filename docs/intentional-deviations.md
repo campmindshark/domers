@@ -40,9 +40,9 @@ cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml
 
 **Spectrum:** The Windows app searches upward from the assembly for `Madmom/env/Scripts/python.exe`, starts `DBNBeatTracker --host_api --audio_input=<index> online`, and parses `BEAT:{seconds}` stdout lines.
 
-**dome-rs:** The beat protocol remains `BEAT:{seconds}`. `domers-inputs` provides a sidecar wrapper for the same `DBNBeatTracker --host_api --audio_input=<index> online` launch contract, and `domers doctor` validates the configured command when `tempo.source = "madmom"`. Packaging is more flexible: the configured command can point at a bundled Python environment, wrapper script, system install, Docker launcher, or native replacement. The source repo does not require a Madmom git submodule.
+**dome-rs:** The beat protocol remains `BEAT:{seconds}`. `domers-inputs` provides a sidecar wrapper for the same `DBNBeatTracker --host_api --audio_input=<index> online` launch contract, `domers doctor` validates the configured command when `tempo.source = "madmom"`, and `domers run` starts the sidecar and ingests stdout lines into the beat runtime. Packaging is more flexible: the configured command can point at a bundled Python environment plus `tracker = "DBNBeatTracker"`, wrapper script, system install, Docker launcher, or native replacement. The source repo does not require a Madmom git submodule.
 
-**Reason:** The old virtualenv path is a Windows packaging detail, not the feature. The feature contract is beat tracking that emits parseable `BEAT:{seconds}` lines and feeds the beat engine. The current Rust runtime preserves the protocol and parsing path; automatic sidecar lifecycle inside `domers run` remains packaging/runtime integration work.
+**Reason:** The old virtualenv path is a Windows packaging detail, not the feature. The feature contract is beat tracking that emits parseable `BEAT:{seconds}` lines and feeds the beat engine.
 
 **Validation:** `domers-inputs` parses valid and malformed `BEAT:` lines and tests sidecar launch arguments plus disabled lifecycle behavior. `domers-core` tests Madmom beat timing windows. `domers-server` tests feeding parsed Madmom beat lines into runtime input state.
 

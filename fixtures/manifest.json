@@ -1,8 +1,17 @@
 {
   "capture_tool": "tools/extract_spectrum_fixtures.py",
+  "fixture_groups": [
+    "spectrum-csharp/dome_mapping.json",
+    "spectrum-csharp/dome_geometry.json",
+    "spectrum-csharp/bar_stage_topology.json",
+    "spectrum-csharp/opc_packets/",
+    "spectrum-csharp/visualizer_frame_cases.json",
+    "config/spectrum_default_config.xml",
+    "orientation/datagram_lengths.json"
+  ],
   "known_unverified": [
     "Hardware wiring must still be checked with diagnostic patterns.",
-    "Visualizer frame hashes will be added when visualizer ports begin."
+    "Visualizer frame cases are source-traceable; pending hashes require the C# fixture runner."
   ],
   "source_repo": "spectrum"
 }

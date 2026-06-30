@@ -11,12 +11,14 @@ Expected elements:
 - `MindShark Dome Control Panel` heading
 - `Start` and `Stop` engine buttons
 - engine status text
-- `OPC Targets` panel showing dome/bar and stage target addresses, enabled state, connection state, successful frame count, and last error
+- `Config Editor` drawer with full native JSON config reload/apply controls
+- floating `OPC Targets` footer showing dome/bar and stage target addresses, enabled state, connection state, successful frame count, and last error
 - WebSocket stream status text
 - `domeActiveVis` selector with Volume, Radial, Race, Snakes, Quaternion Test, Quaternion Multi Test, Quaternion Paintbrush, Splat, and TV Static
 - `flashSpeed` slider
-- eight palette slots matching Spectrum's VJ HUD selection
-- runtime palette color controls for entries 1-3 in the selected palette slot
+- closed `Palettes` drawer with the active palette selector
+- opening `Palettes` shows all eight palette slots at once, each with eight editable entries, `color1`, `color2`, and gradient enablement
+- closed `Inputs` drawer with tap tempo, orientation calibration, audio/MIDI/orientation/Madmom adapter status, active orientation devices, and MIDI log
 - closed `Debug Visuals` drawer with selectors for dome, bar, and stage test patterns
 - closed `Preview` drawer
 - link from the preview drawer to `/simulator`
@@ -50,7 +52,7 @@ Expected behavior when selecting each dome visualizer:
 
 - selected value matches the server config field `dome.active_visualizer`
 - flash speed and palette slot update server runtime config
-- palette color edits patch `config.color_palette` through `/api/config/palette`
+- palette color and gradient edits patch all 64 `config.color_palette` entries through `/api/config/palette`
 - Debug Visuals selectors patch test-pattern fields through `/api/config/diagnostics`
 - dome debug visuals override the active dome visualizer until switched back to `Off`
 - simulator frame stream updates after the selection is applied
@@ -78,6 +80,7 @@ Expected simulator behavior:
 - buffer-based visualizers can render with OPC disabled
 - display color compensation is applied only to the UI view, never to OPC bytes
 - preview drawer shows frame metrics, stream status, and `dome-simulator` without simulator-only controls
+- live preview and `/simulator` expose bar and stage command previews beside the dome canvas
 
 TODO: Add image of a non-empty dome simulator frame.
 
@@ -89,9 +92,6 @@ TODO: Add image of a non-empty dome simulator frame.
 
 These controls are not cuts. They need API state, UI binding, simulator evidence, and tests.
 
-- config editor
-- MIDI log
-- full 64-entry Spectrum color palette editor, including gradient color2 controls
 - dome volume rotation speed
 - dome gradient speed
 - dome global fade speed
@@ -99,8 +99,4 @@ These controls are not cuts. They need API state, UI binding, simulator evidence
 - dome twinkle density
 - dome ripple controls
 - dome radial effect, size, frequency, center angle, and center distance
-- tempo/Madmom controls
-- orientation calibration panel
-- bar simulator
-- stage simulator
 - diagnostics panel

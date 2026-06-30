@@ -192,17 +192,32 @@ pub struct VisualizerInput {
     pub secondary: Rgb,
     /// Accent operator palette color.
     pub accent: Rgb,
+    /// Active Spectrum palette bank colors 0-7.
+    pub palette: [Rgb; 8],
 }
 
 impl Default for VisualizerInput {
     fn default() -> Self {
+        let primary = Rgb::from_u24(0x00_ff_00);
+        let secondary = Rgb::from_u24(0x00_80_ff);
+        let accent = Rgb::from_u24(0xff_40_80);
         Self {
             volume: 0.5,
             beat_progress: 0.25,
             flash_active: true,
-            primary: Rgb::from_u24(0x00_ff_00),
-            secondary: Rgb::from_u24(0x00_80_ff),
-            accent: Rgb::from_u24(0xff_40_80),
+            primary,
+            secondary,
+            accent,
+            palette: [
+                primary,
+                secondary,
+                accent,
+                Rgb::from_u24(0xff_ff_00),
+                Rgb::from_u24(0xff_00_ff),
+                Rgb::from_u24(0x00_ff_ff),
+                Rgb::from_u24(0xff_ff_ff),
+                Rgb::BLACK,
+            ],
         }
     }
 }
@@ -588,11 +603,7 @@ fn volume_frame(input: VisualizerInput) -> Vec<Rgb> {
     let lit = lit_count(input.volume);
     preview_frame(|index| {
         if index <= lit {
-            if index % 2 == 0 {
-                input.primary.scale(input.volume)
-            } else {
-                input.secondary.scale(input.volume)
-            }
+            input.palette[(index / 233) % 4].scale(input.volume)
         } else {
             Rgb::from_u24(0x02_02_02)
         }
@@ -616,17 +627,13 @@ fn flash_frame(input: VisualizerInput) -> Vec<Rgb> {
 
 fn radial_frame(input: VisualizerInput) -> Vec<Rgb> {
     let offset = phase_offset(input.beat_progress);
-    preview_frame(|index| match (index + offset) % 3 {
-        0 => input.primary,
-        1 => input.secondary,
-        _ => input.accent,
-    })
+    preview_frame(|index| input.palette[((index + offset) / 89) % input.palette.len()])
 }
 
 fn splat_frame(input: VisualizerInput) -> Vec<Rgb> {
     preview_frame(|index| {
         if index % 11 == 0 || index % 17 == 0 {
-            input.accent
+            input.palette[(index / 11) % input.palette.len()]
         } else {
             input.primary.scale(0.18)
         }
@@ -638,9 +645,9 @@ fn race_frame(input: VisualizerInput) -> Vec<Rgb> {
     preview_frame(|index| {
         let distance = (index + DOME_PIXELS - offset) % DOME_PIXELS;
         if distance < 320 {
-            input.accent
+            input.palette[2]
         } else if distance < 640 {
-            input.secondary.scale(0.45)
+            input.palette[1].scale(0.45)
         } else {
             Rgb::BLACK
         }
@@ -652,9 +659,9 @@ fn snakes_frame(input: VisualizerInput) -> Vec<Rgb> {
     preview_frame(|index| {
         let lane = (index + offset) % 24;
         if lane < 5 {
-            input.primary
+            input.palette[(index / 377) % input.palette.len()]
         } else if lane < 9 {
-            input.secondary.scale(0.6)
+            input.palette[(index / 233 + 1) % input.palette.len()].scale(0.6)
         } else {
             Rgb::BLACK
         }
@@ -664,27 +671,22 @@ fn snakes_frame(input: VisualizerInput) -> Vec<Rgb> {
 fn quaternion_test_frame(input: VisualizerInput) -> Vec<Rgb> {
     preview_frame(|index| {
         if index % 8 < 4 {
-            input.secondary
+            input.palette[1]
         } else {
-            input.primary.scale(0.3)
+            input.palette[0].scale(0.3)
         }
     })
 }
 
 fn quaternion_multi_test_frame(input: VisualizerInput) -> Vec<Rgb> {
-    preview_frame(|index| match index % 4 {
-        0 => input.primary,
-        1 => input.secondary,
-        2 => input.accent,
-        _ => Rgb::BLACK,
-    })
+    preview_frame(|index| input.palette[index % input.palette.len()])
 }
 
 fn quaternion_paintbrush_frame(input: VisualizerInput) -> Vec<Rgb> {
     let offset = phase_offset(input.beat_progress);
     preview_frame(|index| {
         if (index + offset) % 13 < 6 {
-            input.accent
+            input.palette[(index / 13 + 2) % input.palette.len()]
         } else {
             Rgb::BLACK
         }
@@ -789,6 +791,35 @@ mod tests {
     }
 
     #[test]
+    fn spectrum_visualizer_fixture_manifest_covers_inventory() {
+        let manifest =
+            include_str!("../../../fixtures/spectrum-csharp/visualizer_frame_cases.json");
+        for visualizer in INVENTORY {
+            assert!(
+                manifest.contains(&format!("\"name\": \"{}\"", visualizer.name)),
+                "{} should have a source-traceable fixture case",
+                visualizer.name
+            );
+            assert!(
+                manifest.contains(&format!(
+                    "spectrum/Spectrum/Visualizers/{}.cs",
+                    visualizer.name
+                )),
+                "{} should cite its Spectrum source file",
+                visualizer.name
+            );
+        }
+        assert_eq!(
+            manifest.matches("\"source_sha256\"").count(),
+            INVENTORY.len()
+        );
+        assert_eq!(
+            manifest.matches("\"pending_csharp_execution\"").count(),
+            INVENTORY.len()
+        );
+    }
+
+    #[test]
     fn every_initial_live_dome_visualizer_produces_a_simulator_frame() {
         for visualizer in [
             LiveVisualizer::TvStatic,
@@ -878,20 +909,20 @@ mod tests {
     fn live_visualizer_frame_hashes_are_stable() {
         let cases = [
             (LiveVisualizer::TvStatic, 14_075_851_066_622_254_809),
-            (LiveVisualizer::Volume, 8_043_719_800_834_997_594),
+            (LiveVisualizer::Volume, 5_403_355_765_041_486_106),
             (LiveVisualizer::Flash, 17_092_067_869_950_253_262),
-            (LiveVisualizer::Radial, 69_789_995_642_437_042),
-            (LiveVisualizer::Splat, 1_790_059_931_600_538_683),
+            (LiveVisualizer::Radial, 1_809_576_378_694_742_732),
+            (LiveVisualizer::Splat, 6_261_929_961_458_295_948),
             (LiveVisualizer::Race, 12_074_785_084_243_685_636),
-            (LiveVisualizer::Snakes, 12_527_579_846_269_835_972),
+            (LiveVisualizer::Snakes, 9_672_234_594_085_961_109),
             (LiveVisualizer::QuaternionTest, 17_270_531_847_863_315_960),
             (
                 LiveVisualizer::QuaternionMultiTest,
-                2_423_281_741_408_710_433,
+                5_298_449_737_626_868_325,
             ),
             (
                 LiveVisualizer::QuaternionPaintbrush,
-                3_911_279_936_247_290_614,
+                6_740_275_545_131_552_642,
             ),
         ];
         let actual: Vec<_> = cases
@@ -903,6 +934,33 @@ mod tests {
             .collect();
         let expected: Vec<_> = cases.into_iter().collect();
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn live_visualizers_consume_full_palette_bank() {
+        let mut custom = VisualizerInput::default();
+        custom.palette[3] = domers_core::Rgb::from_u24(0x11_22_33);
+        custom.palette[4] = domers_core::Rgb::from_u24(0x44_55_66);
+        custom.palette[5] = domers_core::Rgb::from_u24(0x77_88_99);
+        custom.palette[6] = domers_core::Rgb::from_u24(0xaa_bb_cc);
+
+        for visualizer in [
+            LiveVisualizer::Volume,
+            LiveVisualizer::Radial,
+            LiveVisualizer::Splat,
+            LiveVisualizer::Snakes,
+            LiveVisualizer::QuaternionMultiTest,
+            LiveVisualizer::QuaternionPaintbrush,
+        ] {
+            assert_ne!(
+                super::frame_hash(&render_dome_visualizer(
+                    visualizer,
+                    VisualizerInput::default()
+                )),
+                super::frame_hash(&render_dome_visualizer(visualizer, custom)),
+                "{visualizer:?} should use palette entries beyond Color 1-3"
+            );
+        }
     }
 
     #[test]

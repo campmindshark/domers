@@ -47,9 +47,30 @@ impl MidiReplay {
     }
 }
 
+/// Parse one live MIDI command payload.
+///
+/// Accepted shape: `note,64,1.0`, `cc,1,0.5`, or `program,3,1.0`.
+#[must_use]
+pub fn parse_midi_payload(payload: &[u8]) -> Option<MidiCommand> {
+    let text = std::str::from_utf8(payload).ok()?.trim();
+    let mut parts = text.split(',').map(str::trim);
+    let kind = match parts.next()? {
+        "note" => MidiCommandKind::Note,
+        "cc" | "control_change" => MidiCommandKind::ControlChange,
+        "program" => MidiCommandKind::Program,
+        _ => return None,
+    };
+    let index = parts.next()?.parse::<u8>().ok()?;
+    let value = parts.next()?.parse::<f32>().ok()?.clamp(0.0, 1.0);
+    if parts.next().is_some() {
+        return None;
+    }
+    Some(MidiCommand { kind, index, value })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MidiCommand, MidiCommandKind, MidiReplay};
+    use super::{parse_midi_payload, MidiCommand, MidiCommandKind, MidiReplay};
 
     #[test]
     fn drains_midi_commands_once() {
@@ -62,5 +83,26 @@ mod tests {
 
         assert_eq!(replay.commands_since_last_tick(), vec![command]);
         assert!(replay.commands_since_last_tick().is_empty());
+    }
+
+    #[test]
+    fn parses_live_midi_payloads() {
+        assert_eq!(
+            parse_midi_payload(b"note,64,1.0"),
+            Some(MidiCommand {
+                kind: MidiCommandKind::Note,
+                index: 64,
+                value: 1.0
+            })
+        );
+        assert_eq!(
+            parse_midi_payload(b"cc,1,0.5"),
+            Some(MidiCommand {
+                kind: MidiCommandKind::ControlChange,
+                index: 1,
+                value: 0.5
+            })
+        );
+        assert_eq!(parse_midi_payload(b"bad,1,1"), None);
     }
 }

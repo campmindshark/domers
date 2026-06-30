@@ -38,6 +38,9 @@
         gap: 0.75rem;
         grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
       }
+      .device-list {
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
       a {
         color: #8cc8ff;
       }
@@ -104,6 +107,14 @@
       </section>
       <section aria-label="Simulator">
         <canvas id="dome-simulator" width="750" height="750" data-frame-source="websocket"></canvas>
+        <h3>Bar Simulator</h3>
+        <ol id="bar-simulator" class="device-list">
+          <li>none</li>
+        </ol>
+        <h3>Stage Simulator</h3>
+        <ol id="stage-simulator" class="device-list">
+          <li>none</li>
+        </ol>
       </section>
     </main>
     <script type="module" src="./main.mjs"></script>

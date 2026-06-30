@@ -70,25 +70,30 @@ impl BeatBroadcaster {
 
     /// Report a Madmom beat timestamp in audio-stream milliseconds.
     pub fn report_madmom_beat(&mut self, beat_ms: u64, realtime_anchor_ms: u64) {
-        if self
-            .madmom_beats
-            .last()
-            .is_some_and(|last| beat_ms.saturating_sub(*last) > Self::MADMOM_TIMEOUT_MS)
-        {
-            self.madmom_beats.clear();
+        if let Some(last) = self.madmom_beats.last() {
+            let since_last = i128::from(beat_ms) - i128::from(*last);
+            if since_last <= 0 || since_last > i128::from(Self::MADMOM_TIMEOUT_MS) {
+                self.madmom_beats.clear();
+            }
         }
         self.madmom_beats.push(beat_ms);
         if self.madmom_beats.len() > Self::MADMOM_WINDOW {
             self.madmom_beats.remove(0);
         }
         if self.madmom_beats.len() >= 2 {
-            let intervals: Vec<_> = self
+            let mut intervals: Vec<_> = self
                 .madmom_beats
                 .windows(2)
                 .map(|pair| pair[1] - pair[0])
                 .collect();
-            let average = intervals.iter().sum::<u64>() / intervals.len() as u64;
-            self.clock = Some(BeatClock::new(average, realtime_anchor_ms));
+            intervals.sort_unstable();
+            let mid = intervals.len() / 2;
+            let median = if intervals.len() % 2 == 1 {
+                intervals[mid]
+            } else {
+                (intervals[mid - 1] + intervals[mid]) / 2
+            };
+            self.clock = Some(BeatClock::new(median, realtime_anchor_ms));
             self.taps.clear();
         }
     }
@@ -167,5 +172,30 @@ mod tests {
         assert_eq!(beat.beat_ms(), Some(500));
         beat.report_madmom_beat(5_250, 5_250);
         assert_eq!(beat.beat_ms(), Some(250));
+    }
+
+    #[test]
+    fn madmom_backwards_timestamp_starts_a_new_window() {
+        let mut beat = BeatBroadcaster::default();
+        beat.report_madmom_beat(10_000, 10_000);
+        beat.report_madmom_beat(10_500, 10_500);
+        assert_eq!(beat.beat_ms(), Some(500));
+
+        beat.report_madmom_beat(100, 11_000);
+        assert_eq!(beat.beat_ms(), Some(500));
+        beat.report_madmom_beat(500, 11_400);
+        assert_eq!(beat.beat_ms(), Some(400));
+    }
+
+    #[test]
+    fn madmom_uses_median_interval() {
+        let mut beat = BeatBroadcaster::default();
+        beat.report_madmom_beat(1_000, 1_000);
+        beat.report_madmom_beat(1_400, 1_400);
+        beat.report_madmom_beat(1_800, 1_800);
+        beat.report_madmom_beat(2_900, 2_900);
+        beat.report_madmom_beat(3_300, 3_300);
+
+        assert_eq!(beat.beat_ms(), Some(400));
     }
 }

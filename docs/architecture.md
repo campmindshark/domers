@@ -38,7 +38,7 @@ HTTP and WebSocket surface:
 - `POST /api/stop`: stop the engine loop
 - `PATCH /api/config/dome`: patch runtime dome controls: active visualizer, flash speed, and palette slot
 - `PATCH /api/config/diagnostics`: patch dome, bar, and stage diagnostic/test-pattern controls
-- `PATCH /api/config/palette`: patch one runtime palette color in the active palette bank
+- `PATCH /api/config/palette`: patch one runtime palette entry, including `color2` gradients
 - `POST /api/input/tap`: record one tap-tempo input
 - `GET /api/dome/geometry`: Spectrum-derived dome projection geometry
 - `GET /api/dome/mapping`: Spectrum-derived dome strut/LED mapping
@@ -80,7 +80,7 @@ The live control page keeps simulator work lazy. It fetches runtime state on loa
 
 ## Beat And Input Runtime
 
-The runtime accepts tap tempo, MIDI commands, audio volume samples, orientation datagrams, and Madmom-compatible `BEAT:{seconds}` lines through explicit input paths. The server exposes input health in `/api/state`, and `POST /api/input/tap` records human tap tempo. `domers-inputs` includes a managed sidecar wrapper for the Spectrum launch contract; release packaging is responsible for providing a runnable Madmom command.
+The runtime accepts tap tempo, MIDI commands, audio volume samples, orientation datagrams, and Madmom-compatible `BEAT:{seconds}` lines through explicit input paths. `domers run` can start optional UDP adapters for audio, MIDI, and orientation, and it manages the Madmom sidecar when `tempo.source = "madmom"`. The server exposes adapter targets, event counters, and last errors in `/api/state`; `POST /api/input/tap` records human tap tempo.
 
 ## Intentional Deviations
 

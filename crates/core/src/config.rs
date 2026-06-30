@@ -37,6 +37,9 @@ pub struct DomersConfig {
     pub stage: StageConfig,
     /// Tempo source config.
     pub tempo: TempoConfig,
+    /// Live input adapter config.
+    #[serde(default)]
+    pub inputs: InputConfig,
     /// Spectrum-compatible runtime color palette.
     #[serde(default)]
     pub color_palette: ColorPalette,
@@ -109,6 +112,101 @@ pub struct TempoConfig {
     pub flash_speed: f64,
 }
 
+/// Live input adapter config.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct InputConfig {
+    /// Optional UDP audio volume source.
+    #[serde(default)]
+    pub audio: UdpInputConfig,
+    /// MIDI command source and binding config.
+    #[serde(default)]
+    pub midi: MidiInputConfig,
+    /// Optional UDP orientation datagram source.
+    #[serde(default)]
+    pub orientation: UdpInputConfig,
+}
+
+/// Optional UDP input binding.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct UdpInputConfig {
+    /// Bind address. When unset, this input adapter is disabled.
+    pub bind: Option<String>,
+}
+
+/// MIDI input binding config.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MidiInputConfig {
+    /// Bind address. When unset, this input adapter is disabled.
+    pub bind: Option<String>,
+    /// Runtime MIDI bindings.
+    #[serde(default)]
+    pub bindings: Vec<MidiBindingConfig>,
+}
+
+/// MIDI command kind used by config bindings.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MidiBindingCommandKind {
+    /// Note on/off command.
+    Note,
+    /// Continuous controller command.
+    ControlChange,
+    /// Program change command.
+    Program,
+}
+
+/// Runtime action driven by a MIDI binding.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MidiBindingAction {
+    /// Toggle flash overlay from command value.
+    Flash,
+    /// Set normalized volume from command value.
+    Volume,
+    /// Trigger tap tempo when command value is positive.
+    TapTempo,
+    /// Select color palette. Uses `target_index` if present, otherwise maps value to 0-7.
+    Palette,
+    /// Select dome visualizer. Uses `target_index` if present, otherwise maps value to 0-8.
+    Visualizer,
+}
+
+/// One MIDI command binding.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct MidiBindingConfig {
+    /// MIDI command kind.
+    pub command_kind: MidiBindingCommandKind,
+    /// Note/controller/program index.
+    pub index: u8,
+    /// Runtime action.
+    pub action: MidiBindingAction,
+    /// Optional fixed target index for palette/visualizer actions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_index: Option<u8>,
+}
+
+impl Default for MidiInputConfig {
+    fn default() -> Self {
+        Self {
+            bind: None,
+            bindings: vec![
+                MidiBindingConfig {
+                    command_kind: MidiBindingCommandKind::Note,
+                    index: 64,
+                    action: MidiBindingAction::Flash,
+                    target_index: None,
+                },
+                MidiBindingConfig {
+                    command_kind: MidiBindingCommandKind::ControlChange,
+                    index: 1,
+                    action: MidiBindingAction::Volume,
+                    target_index: None,
+                },
+            ],
+        }
+    }
+}
+
 /// Tempo source.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -126,6 +224,9 @@ pub enum TempoSource {
 pub struct MadmomConfig {
     /// Sidecar executable or command name.
     pub command: String,
+    /// Optional tracker/script argument for Python-style Spectrum launches.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tracker: Option<String>,
     /// Optional audio input index to pass through.
     pub audio_input_index: Option<u32>,
 }
@@ -185,10 +286,12 @@ impl Default for DomersConfig {
                 source: TempoSource::Human,
                 flash_speed: 0.0,
             },
+            inputs: InputConfig::default(),
             color_palette: ColorPalette::default(),
             color_palette_index: 0,
             madmom: MadmomConfig {
                 command: "DBNBeatTracker".to_string(),
+                tracker: None,
                 audio_input_index: None,
             },
         }
@@ -236,6 +339,8 @@ struct DomersConfigToml {
     stage: StageConfig,
     tempo: TempoConfig,
     #[serde(default)]
+    inputs: InputConfig,
+    #[serde(default)]
     color_palette: ColorPaletteToml,
     #[serde(default)]
     color_palette_index: u8,
@@ -249,6 +354,7 @@ impl From<DomersConfigToml> for DomersConfig {
             bar: config.bar,
             stage: config.stage,
             tempo: config.tempo,
+            inputs: config.inputs,
             color_palette: config.color_palette.into_color_palette(),
             color_palette_index: config.color_palette_index,
             madmom: config.madmom,
@@ -308,6 +414,7 @@ struct DomersConfigTomlOut {
     bar: BarConfig,
     stage: StageConfig,
     tempo: TempoConfig,
+    inputs: InputConfig,
     color_palette: ColorPaletteDryToml,
     madmom: MadmomConfig,
 }
@@ -320,6 +427,7 @@ impl From<&DomersConfig> for DomersConfigTomlOut {
             bar: config.bar.clone(),
             stage: config.stage.clone(),
             tempo: config.tempo.clone(),
+            inputs: config.inputs.clone(),
             color_palette: ColorPaletteDryToml::from(&config.color_palette),
             madmom: config.madmom.clone(),
         }

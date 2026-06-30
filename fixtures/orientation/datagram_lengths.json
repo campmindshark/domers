@@ -1,4 +1,14 @@
 {
+  "layout": {
+    "device_id_byte": 0,
+    "device_type_byte": 5,
+    "timestamp_bytes": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
   "source": "spectrum/Spectrum/DatagramHandler.cs",
   "types": {
     "1": {

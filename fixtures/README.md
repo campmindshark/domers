@@ -5,11 +5,15 @@ Reference fixtures are captured before Rust behavior is trusted.
 Expected fixture groups:
 
 - `spectrum-csharp/`: exported C# topology and OPC packet references
+- `spectrum-csharp/visualizer_frame_cases.json`: source-traceable visualizer parity cases
 - `config/`: default and edge XML configs used only for migration tests
 - `orientation/`: UDP datagram samples
 - `madmom/`: sidecar stdout samples
 
 All fixture captures must document source commit, command, and known unverified hardware behavior.
+Visualizer cases start with source hashes and deterministic inputs. Their
+`expected.value` remains `null` until a C# fixture runner records the Spectrum
+frame hash for that case.
 
 ## Regenerate Fixtures
 

@@ -1,6 +1,6 @@
 //! Runnable Domers server contract and HTTP/WebSocket adapter.
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::VecDeque, net::SocketAddr, process::Stdio, sync::Arc, time::Duration};
 
 use axum::{
     extract::{
@@ -12,9 +12,15 @@ use axum::{
     routing::{get, patch, post},
     Json, Router,
 };
-use domers_core::{BeatBroadcaster, ColorPalette, DomersConfig, EngineConfig, PaletteEntry, Rgb};
+use domers_core::{
+    BeatBroadcaster, ColorPalette, DomersConfig, EngineConfig, MidiBindingAction,
+    MidiBindingCommandKind, MidiBindingConfig, PaletteEntry, Rgb, TempoSource,
+};
 use domers_engine::{schedule_operator_frame, FullVisualizerSpec, InputSpec, OutputSpec};
-use domers_inputs::{classify_datagram, parse_beat_line, MidiCommand, MidiCommandKind};
+use domers_inputs::{
+    parse_beat_line, parse_midi_payload, parse_volume_payload, MadmomLaunchConfig, MidiCommand,
+    MidiCommandKind, OrientationDevice, OrientationInputState, OrientationQuaternion,
+};
 use domers_outputs::{
     apply_bar_commands, apply_dome_commands, apply_stage_commands, BarCommand, DomeCommand,
     OpcAddress, OpcClient, PersistentChannel, StageCommand,
@@ -26,7 +32,9 @@ use domers_visualizers::{
 };
 use serde::{Deserialize, Serialize};
 use tokio::{
-    net::TcpListener,
+    io::{AsyncBufReadExt, BufReader},
+    net::{TcpListener, UdpSocket},
+    process::Command,
     sync::{broadcast, Mutex},
     task::JoinHandle,
     time::{self, MissedTickBehavior},
@@ -100,8 +108,114 @@ pub struct InputStatus {
     pub madmom_beats: u64,
     /// Number of MIDI commands applied.
     pub midi_commands: u64,
+    /// Recent MIDI command/action log.
+    pub midi_log: Vec<MidiLogEntry>,
     /// Last recognized orientation datagram kind.
     pub last_orientation: Option<String>,
+    /// Active orientation devices.
+    pub orientation_devices: Vec<OrientationDeviceStatus>,
+    /// Live audio adapter status.
+    pub audio_adapter: InputAdapterStatus,
+    /// Live MIDI adapter status.
+    pub midi_adapter: InputAdapterStatus,
+    /// Live orientation adapter status.
+    pub orientation_adapter: InputAdapterStatus,
+    /// Managed Madmom sidecar status.
+    pub madmom_adapter: InputAdapterStatus,
+}
+
+/// Browser-facing MIDI log entry.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct MidiLogEntry {
+    /// Runtime timestamp when the command was applied.
+    pub timestamp_ms: u64,
+    /// Command kind.
+    pub kind: String,
+    /// Note/controller/program index.
+    pub index: u8,
+    /// Normalized command value.
+    pub value: f32,
+    /// Actions triggered by this command.
+    pub actions: Vec<String>,
+}
+
+/// Browser-facing orientation quaternion.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
+pub struct OrientationQuaternionStatus {
+    /// X component.
+    pub x: f32,
+    /// Y component.
+    pub y: f32,
+    /// Z component.
+    pub z: f32,
+    /// W component.
+    pub w: f32,
+}
+
+impl From<OrientationQuaternion> for OrientationQuaternionStatus {
+    fn from(value: OrientationQuaternion) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+            z: value.z,
+            w: value.w,
+        }
+    }
+}
+
+/// Browser-facing active orientation device state.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct OrientationDeviceStatus {
+    /// Device id from the datagram.
+    pub device_id: u8,
+    /// Last accepted device timestamp.
+    pub timestamp: i32,
+    /// Device kind name.
+    pub kind: String,
+    /// Raw Spectrum device type.
+    pub device_type: u8,
+    /// Current orientation.
+    pub current_orientation: OrientationQuaternionStatus,
+    /// Calibration origin.
+    pub calibration_origin: OrientationQuaternionStatus,
+    /// Calibrated current rotation.
+    pub current_rotation: OrientationQuaternionStatus,
+    /// Current action flag.
+    pub action_flag: u8,
+    /// Whether this device reports angular speed.
+    pub has_speed: bool,
+    /// Last short-window angular speed value.
+    pub avg_distance_short: f64,
+}
+
+impl From<OrientationDevice> for OrientationDeviceStatus {
+    fn from(value: OrientationDevice) -> Self {
+        Self {
+            device_id: value.device_id,
+            timestamp: value.timestamp,
+            kind: format!("{:?}", value.kind),
+            device_type: value.device_type,
+            current_orientation: value.current_orientation.into(),
+            calibration_origin: value.calibration_origin.into(),
+            current_rotation: value.current_rotation().into(),
+            action_flag: value.action_flag,
+            has_speed: value.has_speed,
+            avg_distance_short: value.avg_distance_short,
+        }
+    }
+}
+
+/// Browser-facing live input adapter status.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct InputAdapterStatus {
+    /// Whether this adapter is configured.
+    pub enabled: bool,
+    /// Bind address or command used by the adapter.
+    pub target: Option<String>,
+    /// Number of accepted events from this adapter.
+    pub events: u64,
+    /// Last lifecycle or parse error.
+    pub last_error: Option<String>,
 }
 
 /// Hardware output status exposed through `/api/state`.
@@ -135,6 +249,10 @@ pub struct SimulatorFrame {
     pub metrics: Metrics,
     /// Dome simulator commands for the frame.
     pub commands: Vec<SimulatorCommand>,
+    /// Bar simulator commands for the frame.
+    pub bar_commands: Vec<BarSimulatorCommand>,
+    /// Stage simulator commands for the frame.
+    pub stage_commands: Vec<StageSimulatorCommand>,
 }
 
 /// Full operator frame produced by the runtime scheduler.
@@ -176,6 +294,42 @@ pub enum SimulatorCommand {
     },
 }
 
+/// Browser-facing bar simulator command.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BarSimulatorCommand {
+    /// Flush marker.
+    Flush,
+    /// Bar pixel write.
+    Pixel {
+        /// Whether the pixel is on the runner strip.
+        is_runner: bool,
+        /// Logical LED index.
+        led_index: usize,
+        /// RGB color encoded as `0xRRGGBB`.
+        color: u32,
+    },
+}
+
+/// Browser-facing stage simulator command.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum StageSimulatorCommand {
+    /// Flush marker.
+    Flush,
+    /// Stage pixel write.
+    Pixel {
+        /// Side index.
+        side_index: usize,
+        /// LED index.
+        led_index: usize,
+        /// Layer index.
+        layer_index: usize,
+        /// RGB color encoded as `0xRRGGBB`.
+        color: u32,
+    },
+}
+
 /// Operator-controlled simulator inputs.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct SimulatorControls {
@@ -199,19 +353,19 @@ impl Default for SimulatorControls {
 
 impl SimulatorControls {
     fn visualizer_input(self, config: &EngineConfig) -> VisualizerInput {
+        let palette = std::array::from_fn(|index| {
+            config
+                .color_palette
+                .single_color(index, config.color_palette_index)
+        });
         VisualizerInput {
             volume: self.volume,
             beat_progress: self.beat_progress,
             flash_active: self.flash_active,
-            primary: config
-                .color_palette
-                .single_color(0, config.color_palette_index),
-            secondary: config
-                .color_palette
-                .single_color(1, config.color_palette_index),
-            accent: config
-                .color_palette
-                .single_color(2, config.color_palette_index),
+            primary: palette[0],
+            secondary: palette[1],
+            accent: palette[2],
+            palette,
         }
     }
 }
@@ -258,6 +412,11 @@ impl ServerState {
         self.config.clone()
     }
 
+    /// Replace the full native config.
+    pub fn replace_full_config(&mut self, config: DomersConfig) {
+        self.config = config;
+    }
+
     /// Patch dome runtime configuration.
     pub fn patch_dome_config(&mut self, patch: DomeConfigPatch) {
         if let Some(active_visualizer) = patch.active_visualizer {
@@ -286,9 +445,13 @@ impl ServerState {
 
     /// Patch one runtime color palette entry.
     pub fn patch_palette_entry(&mut self, patch: PaletteEntryPatch) {
+        let color_palette_index = patch
+            .color_palette_index
+            .unwrap_or(self.config.color_palette_index)
+            .min(7);
         let absolute_index = ColorPalette::absolute_index(
             usize::from(patch.relative_index.min(7)),
-            self.config.color_palette_index,
+            color_palette_index,
         );
         if self.config.color_palette.colors.len() <= absolute_index {
             self.config
@@ -347,6 +510,8 @@ impl ServerState {
     /// Apply one live audio volume sample.
     pub fn apply_audio_volume(&mut self, volume: f32) {
         self.inputs.volume = Some(volume.clamp(0.0, 1.0));
+        self.inputs.audio_adapter.events = self.inputs.audio_adapter.events.saturating_add(1);
+        self.inputs.audio_adapter.last_error = None;
     }
 
     /// Record a human tap-tempo event at the current runtime timestamp.
@@ -359,9 +524,12 @@ impl ServerState {
     pub fn report_madmom_line(&mut self, line: &str) -> bool {
         if let Some(beat_ms) = parse_beat_line(line) {
             self.inputs.madmom_beats = self.inputs.madmom_beats.saturating_add(1);
+            self.inputs.madmom_adapter.events = self.inputs.madmom_adapter.events.saturating_add(1);
+            self.inputs.madmom_adapter.last_error = None;
             self.inputs.beat.report_madmom_beat(beat_ms, self.now_ms());
             true
         } else {
+            self.inputs.madmom_adapter.last_error = Some("malformed BEAT line".to_string());
             false
         }
     }
@@ -372,34 +540,139 @@ impl ServerState {
             .inputs
             .midi_commands
             .saturating_add(commands.len() as u64);
+        if !commands.is_empty() {
+            self.inputs.midi_adapter.events = self
+                .inputs
+                .midi_adapter
+                .events
+                .saturating_add(commands.len() as u64);
+            self.inputs.midi_adapter.last_error = None;
+        }
+        let bindings = self.config.inputs.midi.bindings.clone();
         for command in commands {
-            match command.kind {
-                MidiCommandKind::Note if command.index == 64 => {
-                    self.simulator.flash_active = command.value > 0.0;
+            let mut actions = Vec::new();
+            for binding in &bindings {
+                if midi_binding_matches(binding, *command) {
+                    let action = self.apply_midi_binding(binding, *command);
+                    actions.push(action);
                 }
-                MidiCommandKind::ControlChange if command.index == 1 => {
-                    self.simulator.volume = command.value.clamp(0.0, 1.0);
+            }
+            self.record_midi_log(*command, actions);
+        }
+    }
+
+    fn apply_midi_binding(&mut self, binding: &MidiBindingConfig, command: MidiCommand) -> String {
+        match binding.action {
+            MidiBindingAction::Flash => {
+                self.simulator.flash_active = command.value > 0.0;
+                "flash".to_string()
+            }
+            MidiBindingAction::Volume => {
+                self.simulator.volume = command.value.clamp(0.0, 1.0);
+                "volume".to_string()
+            }
+            MidiBindingAction::TapTempo => {
+                if command.value > 0.0 {
+                    self.tap_tempo();
                 }
-                _ => {}
+                "tap_tempo".to_string()
+            }
+            MidiBindingAction::Palette => {
+                let index = binding
+                    .target_index
+                    .unwrap_or_else(|| scaled_index(command.value, 8));
+                self.config.color_palette_index = index.min(7);
+                format!("palette:{}", self.config.color_palette_index)
+            }
+            MidiBindingAction::Visualizer => {
+                let index = binding
+                    .target_index
+                    .unwrap_or_else(|| scaled_index(command.value, 9));
+                self.config.dome.active_visualizer = index.min(8);
+                format!("visualizer:{}", self.config.dome.active_visualizer)
             }
         }
     }
 
+    fn record_midi_log(&mut self, command: MidiCommand, actions: Vec<String>) {
+        const MAX_MIDI_LOG_ENTRIES: usize = 32;
+        if self.inputs.midi_log.len() == MAX_MIDI_LOG_ENTRIES {
+            self.inputs.midi_log.pop_front();
+        }
+        self.inputs.midi_log.push_back(MidiLogEntry {
+            timestamp_ms: self.now_ms(),
+            kind: format!("{:?}", command.kind),
+            index: command.index,
+            value: command.value,
+            actions,
+        });
+    }
+
     /// Classify and record one orientation datagram.
     pub fn apply_orientation_datagram(&mut self, bytes: &[u8]) -> bool {
-        if let Some(kind) = classify_datagram(bytes) {
+        if let Some(kind) = self
+            .inputs
+            .orientation
+            .process_datagram(bytes, self.now_ms())
+        {
             self.inputs.last_orientation = Some(format!("{kind:?}"));
+            self.inputs.orientation_adapter.events =
+                self.inputs.orientation_adapter.events.saturating_add(1);
+            self.inputs.orientation_adapter.last_error = None;
             true
         } else {
+            self.inputs.orientation_adapter.last_error =
+                Some("unrecognized orientation datagram".to_string());
             false
         }
     }
 
+    /// Calibrate all active orientation devices.
+    pub fn calibrate_orientation_devices(&mut self) {
+        self.inputs.orientation.calibrate_all();
+    }
+
+    /// Configure live input adapter targets for status reporting.
+    pub fn configure_input_adapters(&mut self, config: &DomersConfig) {
+        self.inputs.audio_adapter.enabled = config.inputs.audio.bind.is_some();
+        self.inputs
+            .audio_adapter
+            .target
+            .clone_from(&config.inputs.audio.bind);
+        self.inputs.midi_adapter.enabled = config.inputs.midi.bind.is_some();
+        self.inputs
+            .midi_adapter
+            .target
+            .clone_from(&config.inputs.midi.bind);
+        self.inputs.orientation_adapter.enabled = config.inputs.orientation.bind.is_some();
+        self.inputs
+            .orientation_adapter
+            .target
+            .clone_from(&config.inputs.orientation.bind);
+        self.inputs.madmom_adapter.enabled = matches!(config.tempo.source, TempoSource::Madmom);
+        self.inputs.madmom_adapter.target = if self.inputs.madmom_adapter.enabled {
+            Some(config.madmom.command.clone())
+        } else {
+            None
+        };
+    }
+
+    fn record_input_adapter_error(&mut self, adapter: InputAdapter, error: impl Into<String>) {
+        let status = match adapter {
+            InputAdapter::Audio => &mut self.inputs.audio_adapter,
+            InputAdapter::Midi => &mut self.inputs.midi_adapter,
+            InputAdapter::Orientation => &mut self.inputs.orientation_adapter,
+            InputAdapter::Madmom => &mut self.inputs.madmom_adapter,
+        };
+        status.enabled = true;
+        status.last_error = Some(error.into());
+    }
+
     /// Produce one deterministic simulator frame for the selected visualizer.
-    pub fn simulator_frame(&mut self) -> Vec<DomeCommand> {
+    pub fn simulator_frame(&mut self) -> OperatorCommandFrame {
         self.metrics.frames = self.metrics.frames.saturating_add(1);
         self.metrics.simulator_frames = self.metrics.simulator_frames.saturating_add(1);
-        self.operator_frame().dome
+        self.operator_frame()
     }
 
     fn record_simulator_frame(&mut self) {
@@ -442,6 +715,10 @@ impl ServerState {
         self.metrics.frames.saturating_mul(2_500) / 1_000
     }
 
+    fn prune_input_state(&mut self) {
+        self.inputs.orientation.remove_stale_devices(self.now_ms());
+    }
+
     fn visualizer_controls(&self) -> SimulatorControls {
         let mut controls = self.simulator;
         if let Some(volume) = self.inputs.volume {
@@ -465,7 +742,19 @@ impl ServerState {
             taps: self.inputs.taps,
             madmom_beats: self.inputs.madmom_beats,
             midi_commands: self.inputs.midi_commands,
+            midi_log: self.inputs.midi_log.iter().cloned().collect(),
             last_orientation: self.inputs.last_orientation.clone(),
+            orientation_devices: self
+                .inputs
+                .orientation
+                .devices()
+                .into_iter()
+                .map(OrientationDeviceStatus::from)
+                .collect(),
+            audio_adapter: self.inputs.audio_adapter.clone(),
+            midi_adapter: self.inputs.midi_adapter.clone(),
+            orientation_adapter: self.inputs.orientation_adapter.clone(),
+            madmom_adapter: self.inputs.madmom_adapter.clone(),
         }
     }
 }
@@ -477,7 +766,50 @@ struct InputRuntime {
     taps: u64,
     madmom_beats: u64,
     midi_commands: u64,
+    midi_log: VecDeque<MidiLogEntry>,
     last_orientation: Option<String>,
+    orientation: OrientationInputState,
+    audio_adapter: InputAdapterStatus,
+    midi_adapter: InputAdapterStatus,
+    orientation_adapter: InputAdapterStatus,
+    madmom_adapter: InputAdapterStatus,
+}
+
+#[derive(Clone, Copy)]
+enum InputAdapter {
+    Audio,
+    Midi,
+    Orientation,
+    Madmom,
+}
+
+fn midi_binding_matches(binding: &MidiBindingConfig, command: MidiCommand) -> bool {
+    binding.index == command.index && midi_kind_matches(binding.command_kind, command.kind)
+}
+
+fn midi_kind_matches(binding: MidiBindingCommandKind, command: MidiCommandKind) -> bool {
+    matches!(
+        (binding, command),
+        (MidiBindingCommandKind::Note, MidiCommandKind::Note)
+            | (
+                MidiBindingCommandKind::ControlChange,
+                MidiCommandKind::ControlChange
+            )
+            | (MidiBindingCommandKind::Program, MidiCommandKind::Program)
+    )
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "MIDI values are clamped to a small fixed UI index range"
+)]
+fn scaled_index(value: f32, count: u8) -> u8 {
+    if count == 0 {
+        return 0;
+    }
+    let last = count - 1;
+    (value.clamp(0.0, 1.0) * f32::from(last)).round() as u8
 }
 
 /// Shared runnable app runtime.
@@ -487,6 +819,7 @@ pub struct AppRuntime {
     hardware: Arc<Mutex<HardwareOutputs>>,
     frames: broadcast::Sender<SimulatorFrame>,
     engine_task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    input_tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
 }
 
 impl Default for AppRuntime {
@@ -500,11 +833,15 @@ impl AppRuntime {
     #[must_use]
     pub fn new(config: DomersConfig) -> Self {
         let (frames, _) = broadcast::channel(32);
+        let mut state = ServerState::new(config);
+        let config = state.full_config();
+        state.configure_input_adapters(&config);
         Self {
-            state: Arc::new(Mutex::new(ServerState::new(config))),
+            state: Arc::new(Mutex::new(state)),
             hardware: Arc::new(Mutex::new(HardwareOutputs::default())),
             frames,
             engine_task: Arc::new(Mutex::new(None)),
+            input_tasks: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -518,10 +855,18 @@ impl AppRuntime {
             .route("/api/state", get(get_state))
             .route("/api/start", post(start_engine))
             .route("/api/stop", post(stop_engine))
+            .route(
+                "/api/config",
+                get(get_full_config).patch(replace_full_config),
+            )
             .route("/api/config/dome", patch(patch_dome_config))
             .route("/api/config/diagnostics", patch(patch_diagnostics))
             .route("/api/config/palette", patch(patch_palette_entry))
             .route("/api/input/tap", post(tap_tempo))
+            .route(
+                "/api/input/orientation/calibrate",
+                post(calibrate_orientation),
+            )
             .route("/api/dome/geometry", get(dome_geometry))
             .route("/api/dome/mapping", get(dome_mapping))
             .route("/api/simulator", patch(patch_simulator_controls))
@@ -543,7 +888,8 @@ impl AppRuntime {
     /// Return a server snapshot.
     pub async fn snapshot(&self) -> ServerSnapshot {
         let (mut snapshot, config) = {
-            let state = self.state.lock().await;
+            let mut state = self.state.lock().await;
+            state.prune_input_state();
             (state.snapshot(), state.full_config())
         };
         snapshot.hardware = self.hardware.lock().await.status_for_config(&config);
@@ -552,12 +898,20 @@ impl AppRuntime {
 
     /// Start the engine task if it is not already running.
     pub async fn start(&self) {
-        self.state.lock().await.start();
+        let config = {
+            let mut state = self.state.lock().await;
+            state.start();
+            let config = state.full_config();
+            state.configure_input_adapters(&config);
+            config
+        };
 
         let mut task = self.engine_task.lock().await;
         if task.as_ref().is_some_and(|handle| !handle.is_finished()) {
             return;
         }
+
+        self.start_input_tasks(&config).await;
 
         let runtime = self.clone();
         *task = Some(tokio::spawn(async move {
@@ -575,6 +929,30 @@ impl AppRuntime {
         };
         self.hardware.lock().await.blackout(&config).await;
         if let Some(task) = self.engine_task.lock().await.take() {
+            task.abort();
+        }
+        self.stop_input_tasks().await;
+    }
+
+    async fn start_input_tasks(&self, config: &DomersConfig) {
+        self.stop_input_tasks().await;
+        let mut tasks = self.input_tasks.lock().await;
+        if let Some(bind) = &config.inputs.audio.bind {
+            tasks.push(spawn_audio_udp_task(self.state.clone(), bind.clone()));
+        }
+        if let Some(bind) = &config.inputs.midi.bind {
+            tasks.push(spawn_midi_udp_task(self.state.clone(), bind.clone()));
+        }
+        if let Some(bind) = &config.inputs.orientation.bind {
+            tasks.push(spawn_orientation_udp_task(self.state.clone(), bind.clone()));
+        }
+        if matches!(config.tempo.source, TempoSource::Madmom) {
+            tasks.push(spawn_madmom_task(self.state.clone(), config.madmom.clone()));
+        }
+    }
+
+    async fn stop_input_tasks(&self) {
+        for task in self.input_tasks.lock().await.drain(..) {
             task.abort();
         }
     }
@@ -606,13 +984,47 @@ impl AppRuntime {
         state.snapshot()
     }
 
+    /// Return the full native config.
+    pub async fn full_config(&self) -> DomersConfig {
+        self.state.lock().await.full_config()
+    }
+
+    /// Replace the full native config and restart input adapters if needed.
+    pub async fn replace_full_config(&self, config: DomersConfig) -> ServerSnapshot {
+        let was_running = {
+            let state = self.state.lock().await;
+            state.running()
+        };
+        if was_running {
+            self.stop_input_tasks().await;
+        }
+        {
+            let mut state = self.state.lock().await;
+            state.replace_full_config(config.clone());
+            state.configure_input_adapters(&config);
+        }
+        if was_running {
+            self.start_input_tasks(&config).await;
+        }
+        self.snapshot().await
+    }
+
+    /// Calibrate all active orientation devices.
+    pub async fn calibrate_orientation_devices(&self) -> ServerSnapshot {
+        let mut state = self.state.lock().await;
+        state.calibrate_orientation_devices();
+        state.snapshot()
+    }
+
     /// Produce one simulator frame immediately.
     pub async fn simulator_frame(&self) -> SimulatorFrame {
         let mut state = self.state.lock().await;
-        let commands = state.simulator_frame();
+        let frame = state.simulator_frame();
         SimulatorFrame {
             metrics: state.metrics(),
-            commands: serialize_commands(commands),
+            commands: serialize_commands(frame.dome),
+            bar_commands: serialize_bar_commands(frame.bar),
+            stage_commands: serialize_stage_commands(frame.stage),
         }
     }
 
@@ -629,6 +1041,8 @@ impl AppRuntime {
         SimulatorFrame {
             metrics: state.metrics(),
             commands: serialize_commands(commands),
+            bar_commands: Vec::new(),
+            stage_commands: Vec::new(),
         }
     }
 
@@ -659,6 +1073,8 @@ impl AppRuntime {
                     Some(SimulatorFrame {
                         metrics: state.metrics(),
                         commands: serialize_commands(operator_frame.dome.clone()),
+                        bar_commands: serialize_bar_commands(operator_frame.bar.clone()),
+                        stage_commands: serialize_stage_commands(operator_frame.stage.clone()),
                     })
                 } else {
                     None
@@ -685,6 +1101,169 @@ impl AppRuntime {
     }
 }
 
+fn spawn_audio_udp_task(state: Arc<Mutex<ServerState>>, bind: String) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let socket = match UdpSocket::bind(&bind).await {
+            Ok(socket) => socket,
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Audio, error.to_string());
+                return;
+            }
+        };
+        let mut buffer = [0_u8; 128];
+        loop {
+            match socket.recv_from(&mut buffer).await {
+                Ok((len, _)) => {
+                    if let Some(volume) = parse_volume_payload(&buffer[..len]) {
+                        state.lock().await.apply_audio_volume(volume);
+                    } else {
+                        state.lock().await.record_input_adapter_error(
+                            InputAdapter::Audio,
+                            "malformed audio volume payload",
+                        );
+                    }
+                }
+                Err(error) => {
+                    state
+                        .lock()
+                        .await
+                        .record_input_adapter_error(InputAdapter::Audio, error.to_string());
+                }
+            }
+        }
+    })
+}
+
+fn spawn_midi_udp_task(state: Arc<Mutex<ServerState>>, bind: String) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let socket = match UdpSocket::bind(&bind).await {
+            Ok(socket) => socket,
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Midi, error.to_string());
+                return;
+            }
+        };
+        let mut buffer = [0_u8; 128];
+        loop {
+            match socket.recv_from(&mut buffer).await {
+                Ok((len, _)) => {
+                    if let Some(command) = parse_midi_payload(&buffer[..len]) {
+                        state.lock().await.apply_midi_commands(&[command]);
+                    } else {
+                        state.lock().await.record_input_adapter_error(
+                            InputAdapter::Midi,
+                            "malformed MIDI payload",
+                        );
+                    }
+                }
+                Err(error) => {
+                    state
+                        .lock()
+                        .await
+                        .record_input_adapter_error(InputAdapter::Midi, error.to_string());
+                }
+            }
+        }
+    })
+}
+
+fn spawn_orientation_udp_task(state: Arc<Mutex<ServerState>>, bind: String) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let socket = match UdpSocket::bind(&bind).await {
+            Ok(socket) => socket,
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Orientation, error.to_string());
+                return;
+            }
+        };
+        let mut buffer = [0_u8; 512];
+        loop {
+            match socket.recv_from(&mut buffer).await {
+                Ok((len, _)) => {
+                    state
+                        .lock()
+                        .await
+                        .apply_orientation_datagram(&buffer[..len]);
+                }
+                Err(error) => {
+                    state
+                        .lock()
+                        .await
+                        .record_input_adapter_error(InputAdapter::Orientation, error.to_string());
+                }
+            }
+        }
+    })
+}
+
+fn spawn_madmom_task(
+    state: Arc<Mutex<ServerState>>,
+    config: domers_core::MadmomConfig,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let launch = MadmomLaunchConfig {
+            command: config.command,
+            tracker: config.tracker,
+            audio_input_index: config.audio_input_index,
+        };
+        let mut child = match Command::new(&launch.command)
+            .args(launch.args())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .stdin(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Madmom, error.to_string());
+                return;
+            }
+        };
+        let Some(stdout) = child.stdout.take() else {
+            state
+                .lock()
+                .await
+                .record_input_adapter_error(InputAdapter::Madmom, "Madmom stdout unavailable");
+            let _ = child.kill().await;
+            return;
+        };
+        let mut lines = BufReader::new(stdout).lines();
+        loop {
+            match lines.next_line().await {
+                Ok(Some(line)) => {
+                    state.lock().await.report_madmom_line(&line);
+                }
+                Ok(None) => break,
+                Err(error) => {
+                    state
+                        .lock()
+                        .await
+                        .record_input_adapter_error(InputAdapter::Madmom, error.to_string());
+                    break;
+                }
+            }
+        }
+        if let Err(error) = child.wait().await {
+            state
+                .lock()
+                .await
+                .record_input_adapter_error(InputAdapter::Madmom, error.to_string());
+        }
+    })
+}
 #[derive(Debug, Default)]
 struct HardwareOutputs {
     dome: HardwareTarget,
@@ -890,7 +1469,9 @@ pub struct DiagnosticConfigPatch {
 #[derive(Clone, Copy, Debug, Deserialize)]
 /// Runtime color palette patch payload.
 pub struct PaletteEntryPatch {
-    /// Color index within the active palette bank.
+    /// Optional palette bank to patch. Defaults to the active runtime palette.
+    pub color_palette_index: Option<u8>,
+    /// Color index within the selected palette bank.
     pub relative_index: u8,
     /// First color encoded as `0xRRGGBB`.
     pub color1: u32,
@@ -939,6 +1520,16 @@ impl SimulatorSandboxRequest {
             primary: domers_core::Rgb::from_u24(self.primary.unwrap_or(0x00_ff_00)),
             secondary: domers_core::Rgb::from_u24(self.secondary.unwrap_or(0x00_80_ff)),
             accent: domers_core::Rgb::from_u24(self.accent.unwrap_or(0xff_40_80)),
+            palette: [
+                domers_core::Rgb::from_u24(self.primary.unwrap_or(0x00_ff_00)),
+                domers_core::Rgb::from_u24(self.secondary.unwrap_or(0x00_80_ff)),
+                domers_core::Rgb::from_u24(self.accent.unwrap_or(0xff_40_80)),
+                domers_core::Rgb::from_u24(0xff_ff_00),
+                domers_core::Rgb::from_u24(0xff_00_ff),
+                domers_core::Rgb::from_u24(0x00_ff_ff),
+                domers_core::Rgb::from_u24(0xff_ff_ff),
+                domers_core::Rgb::BLACK,
+            ],
         }
     }
 }
@@ -994,6 +1585,17 @@ async fn stop_engine(State(runtime): State<AppRuntime>) -> Json<ServerSnapshot> 
     Json(runtime.snapshot().await)
 }
 
+async fn get_full_config(State(runtime): State<AppRuntime>) -> Json<DomersConfig> {
+    Json(runtime.full_config().await)
+}
+
+async fn replace_full_config(
+    State(runtime): State<AppRuntime>,
+    Json(config): Json<DomersConfig>,
+) -> Json<ServerSnapshot> {
+    Json(runtime.replace_full_config(config).await)
+}
+
 async fn patch_dome_config(
     State(runtime): State<AppRuntime>,
     Json(patch): Json<DomeConfigPatch>,
@@ -1020,6 +1622,11 @@ async fn patch_palette_entry(
 
 async fn tap_tempo(State(runtime): State<AppRuntime>) -> Json<ServerSnapshot> {
     runtime.tap_tempo().await;
+    Json(runtime.snapshot().await)
+}
+
+async fn calibrate_orientation(State(runtime): State<AppRuntime>) -> Json<ServerSnapshot> {
+    runtime.calibrate_orientation_devices().await;
     Json(runtime.snapshot().await)
 }
 
@@ -1076,6 +1683,44 @@ fn serialize_commands(commands: Vec<DomeCommand>) -> Vec<SimulatorCommand> {
             } => SimulatorCommand::Pixel {
                 strut_index,
                 led_index,
+                color: color.to_u24(),
+            },
+        })
+        .collect()
+}
+
+fn serialize_bar_commands(commands: Vec<BarCommand>) -> Vec<BarSimulatorCommand> {
+    commands
+        .into_iter()
+        .map(|command| match command {
+            BarCommand::Flush => BarSimulatorCommand::Flush,
+            BarCommand::Pixel {
+                is_runner,
+                led_index,
+                color,
+            } => BarSimulatorCommand::Pixel {
+                is_runner,
+                led_index,
+                color: color.to_u24(),
+            },
+        })
+        .collect()
+}
+
+fn serialize_stage_commands(commands: Vec<StageCommand>) -> Vec<StageSimulatorCommand> {
+    commands
+        .into_iter()
+        .map(|command| match command {
+            StageCommand::Flush => StageSimulatorCommand::Flush,
+            StageCommand::Pixel {
+                side_index,
+                led_index,
+                layer_index,
+                color,
+            } => StageSimulatorCommand::Pixel {
+                side_index,
+                led_index,
+                layer_index,
                 color: color.to_u24(),
             },
         })
@@ -1411,18 +2056,46 @@ const fn visualizer_from_index(index: u8) -> LiveVisualizer {
 #[cfg(test)]
 mod tests {
     use std::{
+        env, fs,
         io::{ErrorKind, Read, Write},
-        net::{SocketAddr, TcpStream},
+        net::{SocketAddr, TcpStream, UdpSocket as StdUdpSocket},
         time::Duration,
     };
 
-    use domers_core::{DomersConfig, PaletteEntry};
+    use domers_core::{
+        DomersConfig, MidiBindingAction, MidiBindingCommandKind, MidiBindingConfig, PaletteEntry,
+        TempoSource, UdpInputConfig,
+    };
     use domers_inputs::{MidiCommand, MidiCommandKind};
     use domers_outputs::DomeCommand;
     use tokio::time;
     use tokio::{io::AsyncReadExt, net::TcpListener};
 
     use super::{health, serve_listener, AppRuntime, ServerState, SimulatorCommand};
+
+    fn free_udp_addr() -> SocketAddr {
+        let socket = StdUdpSocket::bind("127.0.0.1:0").expect("ephemeral UDP bind");
+        socket.local_addr().expect("local UDP addr")
+    }
+
+    fn send_udp(addr: SocketAddr, payload: &[u8]) {
+        let socket = StdUdpSocket::bind("127.0.0.1:0").expect("UDP sender bind");
+        socket.send_to(payload, addr).expect("UDP send succeeds");
+    }
+
+    async fn wait_for_input_events(runtime: &AppRuntime) -> super::ServerSnapshot {
+        for _ in 0..50 {
+            let snapshot = runtime.snapshot().await;
+            if snapshot.inputs.audio_adapter.events == 1
+                && snapshot.inputs.midi_adapter.events == 1
+                && snapshot.inputs.orientation_adapter.events == 1
+            {
+                return snapshot;
+            }
+            time::sleep(Duration::from_millis(10)).await;
+        }
+        runtime.snapshot().await
+    }
 
     #[test]
     fn health_is_ok() {
@@ -1446,6 +2119,7 @@ mod tests {
         assert!((state.config().flash_speed - 8.0).abs() < f64::EPSILON);
         assert_eq!(state.config().color_palette_index, 4);
         assert!(frame
+            .dome
             .iter()
             .any(|command| matches!(command, DomeCommand::Frame(_))));
         assert_eq!(state.metrics().frames, 1);
@@ -1631,8 +2305,131 @@ mod tests {
         assert_eq!(snapshot.inputs.madmom_beats, 2);
         assert_eq!(snapshot.inputs.midi_commands, 2);
         assert_eq!(snapshot.inputs.last_orientation.as_deref(), Some("WandV1"));
+        assert_eq!(snapshot.inputs.orientation_devices.len(), 1);
+        assert_eq!(snapshot.inputs.orientation_devices[0].device_id, 1);
         assert!(!snapshot.simulator.flash_active);
         assert!((snapshot.simulator.volume - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn midi_bindings_drive_runtime_actions_and_log() {
+        let mut config = DomersConfig::default();
+        config.inputs.midi.bindings = vec![
+            MidiBindingConfig {
+                command_kind: MidiBindingCommandKind::Note,
+                index: 60,
+                action: MidiBindingAction::TapTempo,
+                target_index: None,
+            },
+            MidiBindingConfig {
+                command_kind: MidiBindingCommandKind::ControlChange,
+                index: 10,
+                action: MidiBindingAction::Palette,
+                target_index: Some(6),
+            },
+            MidiBindingConfig {
+                command_kind: MidiBindingCommandKind::Program,
+                index: 2,
+                action: MidiBindingAction::Visualizer,
+                target_index: Some(8),
+            },
+        ];
+        let mut state = ServerState::new(config);
+
+        state.apply_midi_commands(&[
+            MidiCommand {
+                kind: MidiCommandKind::Note,
+                index: 60,
+                value: 1.0,
+            },
+            MidiCommand {
+                kind: MidiCommandKind::ControlChange,
+                index: 10,
+                value: 0.5,
+            },
+            MidiCommand {
+                kind: MidiCommandKind::Program,
+                index: 2,
+                value: 1.0,
+            },
+        ]);
+
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.inputs.taps, 1);
+        assert_eq!(snapshot.config.color_palette_index, 6);
+        assert_eq!(snapshot.config.dome_active_vis, 8);
+        assert_eq!(snapshot.inputs.midi_commands, 3);
+        assert_eq!(snapshot.inputs.midi_log.len(), 3);
+        assert_eq!(snapshot.inputs.midi_log[0].actions, ["tap_tempo"]);
+        assert_eq!(snapshot.inputs.midi_log[1].actions, ["palette:6"]);
+        assert_eq!(snapshot.inputs.midi_log[2].actions, ["visualizer:8"]);
+    }
+
+    #[tokio::test]
+    async fn runtime_udp_input_adapters_feed_live_state() {
+        let audio_addr = free_udp_addr();
+        let midi_addr = free_udp_addr();
+        let orientation_addr = free_udp_addr();
+        let mut config = DomersConfig::default();
+        config.inputs.audio = UdpInputConfig {
+            bind: Some(audio_addr.to_string()),
+        };
+        config.inputs.midi = domers_core::MidiInputConfig {
+            bind: Some(midi_addr.to_string()),
+            ..domers_core::MidiInputConfig::default()
+        };
+        config.inputs.orientation = UdpInputConfig {
+            bind: Some(orientation_addr.to_string()),
+        };
+        let runtime = AppRuntime::new(config);
+
+        runtime.start().await;
+        time::sleep(Duration::from_millis(25)).await;
+        send_udp(audio_addr, b"0.42");
+        send_udp(midi_addr, b"cc,1,0.25");
+        send_udp(orientation_addr, &[1; 15]);
+
+        let snapshot = wait_for_input_events(&runtime).await;
+        runtime.stop().await;
+
+        assert_eq!(snapshot.inputs.volume, Some(0.42));
+        assert_eq!(snapshot.inputs.midi_commands, 1);
+        assert_eq!(snapshot.inputs.last_orientation.as_deref(), Some("WandV1"));
+        assert_eq!(snapshot.inputs.audio_adapter.events, 1);
+        assert_eq!(snapshot.inputs.midi_adapter.events, 1);
+        assert_eq!(snapshot.inputs.orientation_adapter.events, 1);
+    }
+
+    #[tokio::test]
+    async fn runtime_madmom_fake_sidecar_feeds_beats() {
+        let script = env::temp_dir().join(format!("domers-fake-madmom-{}.py", std::process::id()));
+        fs::write(
+            &script,
+            "import time\nprint('BEAT:1.000', flush=True)\ntime.sleep(0.02)\nprint('BEAT:1.400', flush=True)\ntime.sleep(0.02)\n",
+        )
+        .expect("fake sidecar script writes");
+
+        let mut config = DomersConfig::default();
+        config.tempo.source = TempoSource::Madmom;
+        config.madmom.command = "python3".to_string();
+        config.madmom.tracker = Some(script.to_string_lossy().to_string());
+        let runtime = AppRuntime::new(config);
+
+        runtime.start().await;
+        let mut snapshot = runtime.snapshot().await;
+        for _ in 0..50 {
+            if snapshot.inputs.madmom_adapter.events >= 2 {
+                break;
+            }
+            time::sleep(Duration::from_millis(10)).await;
+            snapshot = runtime.snapshot().await;
+        }
+        runtime.stop().await;
+        let _ = fs::remove_file(script);
+
+        assert_eq!(snapshot.inputs.madmom_beats, 2);
+        assert_eq!(snapshot.inputs.beat_ms, Some(400));
+        assert_eq!(snapshot.inputs.madmom_adapter.last_error, None);
     }
 
     #[test]
@@ -1644,6 +2441,7 @@ mod tests {
             color_palette_index: Some(2),
         });
         state.patch_palette_entry(super::PaletteEntryPatch {
+            color_palette_index: None,
             relative_index: 1,
             color1: 0xaa_bb_cc,
             color2: Some(0x11_22_33),
@@ -1654,6 +2452,34 @@ mod tests {
         assert_eq!(
             state.config().color_palette.colors[absolute_index],
             PaletteEntry::gradient(0xaa_bb_cc, 0x11_22_33)
+        );
+    }
+
+    #[test]
+    fn patches_explicit_runtime_palette_bank() {
+        let mut state = ServerState::default();
+        state.patch_dome_config(super::DomeConfigPatch {
+            active_visualizer: None,
+            flash_speed: None,
+            color_palette_index: Some(2),
+        });
+        state.patch_palette_entry(super::PaletteEntryPatch {
+            color_palette_index: Some(5),
+            relative_index: 2,
+            color1: 0x44_55_66,
+            color2: None,
+            color2_enabled: Some(false),
+        });
+
+        let edited_index = domers_core::ColorPalette::absolute_index(2, 5);
+        let active_bank_index = domers_core::ColorPalette::absolute_index(2, 2);
+        assert_eq!(
+            state.config().color_palette.colors[edited_index],
+            PaletteEntry::solid(0x44_55_66)
+        );
+        assert_ne!(
+            state.config().color_palette.colors[active_bank_index],
+            PaletteEntry::solid(0x44_55_66)
         );
     }
 
@@ -1802,6 +2628,54 @@ mod tests {
         assert_eq!(body.len(), super::dome_pixel_count(&config) * 3);
         assert!(body.iter().all(|channel| *channel == 0));
         assert!(hardware.status().dome.connected);
+    }
+
+    #[tokio::test]
+    async fn hardware_outputs_reconnect_after_loopback_opc_returns() {
+        let reserved = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener binds");
+        let addr = reserved.local_addr().expect("listener has local addr");
+        drop(reserved);
+        let mut config = DomersConfig::default();
+        config.dome.enabled = true;
+        config.dome.opc_address = format!("127.0.0.1:{}", addr.port());
+        let frame = super::OperatorCommandFrame {
+            dome: vec![
+                DomeCommand::Pixel {
+                    strut_index: 0,
+                    led_index: 0,
+                    color: domers_core::Rgb::from_u24(0x00_ff_00),
+                },
+                DomeCommand::Flush,
+            ],
+            ..super::OperatorCommandFrame::default()
+        };
+        let mut hardware = super::HardwareOutputs::default();
+
+        hardware.send_operator_frame(&config, &frame).await;
+        assert!(!hardware.status().dome.connected);
+        assert!(hardware.status().dome.last_error.is_some());
+
+        let listener = TcpListener::bind(addr).await.expect("listener rebinds");
+        let read = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.expect("accepts");
+            let mut header = [0_u8; 4];
+            stream.read_exact(&mut header).await.expect("reads header");
+            let length = u16::from_be_bytes([header[2], header[3]]) as usize;
+            let mut body = vec![0_u8; length];
+            stream.read_exact(&mut body).await.expect("reads body");
+            (header, body)
+        });
+
+        hardware.send_operator_frame(&config, &frame).await;
+
+        let (header, body) = read.await.expect("read joins");
+        assert_eq!(header[0], 0);
+        assert!(!body.is_empty());
+        assert!(hardware.status().dome.connected);
+        assert_eq!(hardware.status().dome.frames_sent, 1);
+        assert!(hardware.status().dome.last_error.is_none());
     }
 
     #[tokio::test]

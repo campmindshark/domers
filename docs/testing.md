@@ -16,15 +16,19 @@ node ui/check.mjs
 - TOML config round-trips and Spectrum XML import warnings.
 - Scheduler priority rules: priority `0`, priority ties, diagnostics, disabled inputs, and output activation.
 - OPC non-standard frame encoding and persistent sparse flush behavior.
-- Simulator command emission with hardware disabled.
+- Simulator command emission with hardware disabled, including dome/bar/stage preview streams.
 - Fake audio, MIDI, orientation, and Madmom beat inputs.
-- Madmom sidecar launch argument and disabled-lifecycle behavior.
+- Live UDP audio/MIDI/orientation adapter parsing and runtime lifecycle ingestion.
+- MIDI binding actions and MIDI log state.
+- Orientation datagram parsing, device state, calibration, action flags, poi speed, and stale-device removal.
+- Madmom sidecar launch argument, disabled-lifecycle behavior, managed stdout ingestion path, and fake-sidecar runtime test.
 - Spectrum-compatible 64-entry palette indexing and gradient blending.
 - Shared-entry palette TOML serialization, parsing, and XML import golden output.
 - Visualizer simulator-frame harness and frame-hash snapshots for live dome modes.
-- Server state contract for runtime config patching, palette patching, start/stop, metrics, input status, hardware status, and simulator frames.
+- Server state contract for full config reload/apply, runtime config patching, palette patching, start/stop, metrics, input status, hardware status, and simulator frames.
 - HTTP adapter smoke coverage for UI, state, geometry, mapping, and start routes.
-- UI smoke markers for API/WebSocket wiring, pixel rendering, runtime palette controls, and simulator controls.
+- UI smoke markers for API/WebSocket wiring, pixel rendering, full palette controls, input status controls, and simulator controls.
+- OPC loopback write and reconnect tests.
 
 Tests for intentional behavior changes cite
 [`intentional-deviations.md`](intentional-deviations.md) so preservation and
@@ -54,7 +58,7 @@ Then open `http://127.0.0.1:3000`, click `Start`, and confirm the metrics advanc
 
 ## PR Full And Nightly
 
-Next additions: Docker Compose OPC loopback services, fake orientation sender services, browser automation, load tests, and physical hardware sign-off artifacts.
+Next additions: browser automation/screenshots, Docker Compose wrappers around the in-process OPC/input loopback tests, load tests, and physical hardware sign-off artifacts.
 
 ## Manual Hardware Checklist
 

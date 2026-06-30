@@ -47,6 +47,12 @@ test_pattern = 0
 source = "human"
 flash_speed = 0.0
 
+[inputs.audio]
+
+[inputs.midi]
+
+[inputs.orientation]
+
 [madmom]
 command = "DBNBeatTracker"
 audio_input_index = 0
@@ -83,10 +89,52 @@ color2_enabled = true
 - `color1` and `color2` use Spectrum's `0xRRGGBB` integer convention.
 - `color2_enabled = false` makes the entry a solid `color1`.
 - `color2_enabled = true` enables Spectrum-compatible gradient blending.
-- Runtime palette slot `N` still uses bank `N` with eight entries; repeated bank references intentionally share one entry definition.
+- Palette slot `N` still uses bank `N` with eight entries; repeated bank references intentionally share one entry definition.
 - The old verbose `[[color_palette.colors]]` 64-entry absolute form still parses for compatibility.
 
 If `color_palette` is omitted, `dome-rs` creates a default 64-entry palette with visible starter colors in entries 0-2.
+
+## Live Inputs
+
+Live input adapters are optional and disabled by default. Set a UDP bind address
+to enable a bridge input when `domers run` starts:
+
+```toml
+[inputs.audio]
+bind = "127.0.0.1:5001" # text float payload, for example 0.42
+
+[inputs.midi]
+bind = "127.0.0.1:5002" # note,64,1.0 or cc,1,0.5
+
+[[inputs.midi.bindings]]
+command_kind = "note"
+index = 64
+action = "flash"
+
+[[inputs.midi.bindings]]
+command_kind = "control_change"
+index = 1
+action = "volume"
+
+[inputs.orientation]
+bind = "127.0.0.1:5005" # raw Spectrum orientation datagrams
+```
+
+The controls page **Inputs** drawer shows each adapter target, accepted event
+count, latest value, and last error. It also shows recent MIDI commands/actions,
+active orientation devices, and an **Calibrate Orientation** control.
+
+Supported MIDI binding actions are:
+
+- `flash`: set flash overlay from command value.
+- `volume`: set normalized volume from command value.
+- `tap_tempo`: trigger tap tempo when command value is positive.
+- `palette`: set the active palette. Use `target_index` for a fixed palette or omit it to map command value across palettes 0-7.
+- `visualizer`: set the active dome visualizer. Use `target_index` for a fixed visualizer or omit it to map command value across visualizers 0-8.
+
+The first no-hardware version treats UDP audio and MIDI as intentional local
+replacement transports for native device capture. Behavior above the transport
+is still exercised through automated tests.
 
 ## Import Existing Spectrum XML
 
@@ -134,11 +182,14 @@ Run `domers doctor` before starting output:
 cargo run --bin domers -- doctor --config domers.toml --bind 127.0.0.1:3000
 ```
 
-After clicking `Start`, the controls page **OPC Targets** panel shows the configured addresses, whether each target is enabled, current TCP connection state, successful frame count, and the most recent connection/write error. A connected target with an increasing frame count means `dome-rs` is successfully writing OPC frames to that TCP endpoint; physical LED confirmation is still part of hardware sign-off.
+After clicking `Start`, the controls page floating **OPC Targets** footer shows the configured addresses, whether each target is enabled, current TCP connection state, successful frame count, and the most recent connection/write error. A connected target with an increasing frame count means `dome-rs` is successfully writing OPC frames to that TCP endpoint; physical LED confirmation is still part of hardware sign-off.
 
 ## Madmom Config
 
-Madmom remains a managed beat sidecar. The current input crate parses beat lines and includes a sidecar wrapper for Spectrum's launch contract.
+Madmom is a managed beat sidecar when `tempo.source = "madmom"`. `domers run`
+starts the configured command, reads `BEAT:{seconds}` stdout lines, and feeds the
+beat runtime. `domers doctor` validates that the command is runnable before
+hardware output starts.
 
 Old Spectrum behavior:
 
@@ -154,10 +205,29 @@ command = "DBNBeatTracker"
 audio_input_index = 0
 ```
 
-The command can point at a bundled Python environment, a wrapper script, a system install, a Docker sidecar launcher, or a native replacement. The repo does not require a Madmom git submodule. The sidecar wrapper launches:
+The command can point at a bundled tracker executable, a wrapper script, a system
+install, a Docker sidecar launcher, or a native replacement. To mirror
+Spectrum's Python invocation, set `command` to Python and `tracker` to
+`DBNBeatTracker`:
+
+```toml
+[madmom]
+command = "python.exe"
+tracker = "DBNBeatTracker"
+audio_input_index = 0
+```
+
+The repo does not require a Madmom git submodule. With no `tracker`, the sidecar
+wrapper launches:
 
 ```text
 <command> --host_api --audio_input=<index> online
+```
+
+With `tracker`, it launches:
+
+```text
+<command> <tracker> --host_api --audio_input=<index> online
 ```
 
 The stable runtime contract is stdout lines shaped like:
