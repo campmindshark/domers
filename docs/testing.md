@@ -61,7 +61,7 @@ Use [`hardware-readiness.md`](hardware-readiness.md) for release sign-off.
 
 TODO: Add image of a passing GitHub Actions run.
 
-- Capture: Actions page for `campmindshark/domers` with `rust-fast`, `docs-and-ui-smoke`, and `docker-loopback-placeholder` green.
+- Capture: Actions page for `campmindshark/dome-rs` with `rust-fast`, `docs-and-ui-smoke`, and `docker-loopback-placeholder` green.
 - Expected: latest `main` run is green.
 - Suggested file: `docs/images/testing-github-actions-green.png`.
 
