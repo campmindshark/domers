@@ -20,8 +20,9 @@ node ui/check.mjs
 - Fake audio, MIDI, orientation, and Madmom beat inputs.
 - Madmom sidecar launch argument and disabled-lifecycle behavior.
 - Spectrum-compatible 64-entry palette indexing and gradient blending.
-- Visualizer simulator-frame harness for live dome modes.
-- Server state contract for runtime config patching, palette patching, start/stop, metrics, and simulator frames.
+- Shared-entry palette TOML serialization, parsing, and XML import golden output.
+- Visualizer simulator-frame harness and frame-hash snapshots for live dome modes.
+- Server state contract for runtime config patching, palette patching, start/stop, metrics, input status, hardware status, and simulator frames.
 - HTTP adapter smoke coverage for UI, state, geometry, mapping, and start routes.
 - UI smoke markers for API/WebSocket wiring, pixel rendering, runtime palette controls, and simulator controls.
 
@@ -53,7 +54,7 @@ Then open `http://127.0.0.1:3000`, click `Start`, and confirm the metrics advanc
 
 ## PR Full And Nightly
 
-Next additions: deeper fixture golden tests, Docker Compose OPC loopback services, Madmom stdout-to-beat runtime tests, fake orientation sender services, visualizer frame hash snapshots, browser automation, and load tests.
+Next additions: Docker Compose OPC loopback services, fake orientation sender services, browser automation, load tests, and physical hardware sign-off artifacts.
 
 ## Manual Hardware Checklist
 

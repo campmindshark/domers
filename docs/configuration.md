@@ -16,29 +16,31 @@ cp examples/domers.toml domers.toml
 ```
 
 ```toml
+color_palette_index = 7
+
 [dome]
 enabled = true
-simulation_enabled = false
-opc_address = "192.168.1.69:7890"
+simulation_enabled = true
+opc_address = "127.0.0.1:7890"
 active_visualizer = 0
 test_pattern = 0
 brightness = 0.356915762888129
 
 [bar]
 enabled = true
-simulation_enabled = false
+simulation_enabled = true
 infinity_width = 50
 infinity_length = 50
 runner_length = 50
-brightness = 0.25
-test_pattern = 0
+brightness = 0.814093959731544
+test_pattern = 1
 
 [stage]
-enabled = true
+enabled = false
 simulation_enabled = false
-opc_address = "192.168.1.70:7890"
+opc_address = "127.0.0.1:7890"
 side_lengths = [18, 19, 19]
-brightness = 0.8
+brightness = 0.834591194968554
 test_pattern = 0
 
 [tempo]
@@ -49,7 +51,12 @@ flash_speed = 0.0
 command = "DBNBeatTracker"
 audio_input_index = 0
 
-[[color_palette.colors]]
+[color_palette]
+banks = [
+  ["entry_01", "entry_02", "entry_03", "entry_04", "entry_05", "entry_06", "entry_07", "entry_08"],
+]
+
+[color_palette.entries.entry_01]
 color1 = 65280
 color2 = 0
 color2_enabled = false
@@ -94,6 +101,8 @@ The command:
 - reads the legacy Spectrum XML
 - maps live fields into the native TOML schema
 - writes a new `dome-rs` TOML file
+- rewrites Spectrum OPC hosts to localhost in the checked example config so local loopback services can stand in for ledscape during development
+- writes palette banks with shared entry definitions instead of repeating duplicate XML colors
 - prints warnings for stale Spectrum fields, inert v1 cuts, and invalid MIDI binding targets
 
 Example warnings:
@@ -123,7 +132,7 @@ command = "DBNBeatTracker"
 audio_input_index = 0
 ```
 
-The command can point at a bundled Python environment, a wrapper script, a system install, a Docker sidecar launcher, or a native replacement. The sidecar wrapper launches:
+The command can point at a bundled Python environment, a wrapper script, a system install, a Docker sidecar launcher, or a native replacement. The repo does not require a Madmom git submodule. The sidecar wrapper launches:
 
 ```text
 <command> --host_api --audio_input=<index> online

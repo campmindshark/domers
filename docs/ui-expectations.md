@@ -12,7 +12,7 @@ Expected elements:
 - `Start` and `Stop` engine buttons
 - engine status text
 - WebSocket stream status text
-- `domeActiveVis` selector with Volume, Radial, Race, Snakes, Quaternion Test, Quaternion Multi Test, Quaternion Paintbrush, and Splat
+- `domeActiveVis` selector with Volume, Radial, Race, Snakes, Quaternion Test, Quaternion Multi Test, Quaternion Paintbrush, Splat, and TV Static
 - `flashSpeed` slider
 - eight palette slots matching Spectrum's VJ HUD selection
 - runtime palette color controls for entries 1-3 in the selected palette slot
@@ -31,9 +31,9 @@ Expected behavior after clicking `Start`:
 
 - engine status changes to `running`
 - controls remain interactive
-- stream status reads `stream connected` once the WebSocket connects
 - frame counters advance while the engine is running
-- simulator canvas remains visible and receives frame data
+- opening the `Preview` drawer connects the simulator stream and shows runtime frame data
+- closing the drawer stops requesting browser preview frames
 
 TODO: Add image of running state.
 
@@ -49,7 +49,7 @@ Expected behavior when selecting each dome visualizer:
 - flash speed and palette slot update server runtime config
 - palette color edits patch `config.color_palette` through `/api/config/palette`
 - simulator frame stream updates after the selection is applied
-- invalid values are rejected after API config validation is tightened
+- invalid values are currently clamped server-side; tighter validation belongs with the config editor work
 
 TODO: Add image sequence of the visualizer selector.
 
@@ -65,7 +65,7 @@ Expected simulator behavior:
 - `/simulator` has simulator-only controls for visualizer, fake audio/beat inputs, flash overlay, and preview colors
 - changing `/simulator` controls does not patch live runtime config, shared simulator inputs, or hardware output
 - TV Static is selectable in the dome visualizer controls
-- Stage Depth is a stage-output visualizer and belongs with stage simulator controls, not the dome canvas selector
+- Stage Depth is a stage-output visualizer and belongs with future stage simulator controls, not the dome canvas selector
 - the live controls page starts simulator work only after opening the `Preview` drawer
 - the live `Preview` drawer mirrors the runtime frame stream used for hardware output
 - dome canvas uses runtime frame data from the server, not direct hardware sockets

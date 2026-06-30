@@ -33,15 +33,16 @@ HTTP and WebSocket surface:
 - `GET /simulator`: dedicated simulator page
 - `GET /main.mjs`: browser control script
 - `GET /api/health`: health JSON
-- `GET /api/state`: running state, engine config, simulator inputs, and metrics
+- `GET /api/state`: running state, engine config, simulator inputs, metrics, hardware status, and input status
 - `POST /api/start`: start the engine loop
 - `POST /api/stop`: stop the engine loop
 - `PATCH /api/config/dome`: patch runtime dome controls: active visualizer, flash speed, and palette slot
 - `PATCH /api/config/palette`: patch one runtime palette color in the active palette bank
+- `POST /api/input/tap`: record one tap-tempo input
 - `GET /api/dome/geometry`: Spectrum-derived dome projection geometry
 - `GET /api/dome/mapping`: Spectrum-derived dome strut/LED mapping
-- `PATCH /api/simulator`: patch simulator-only preview inputs: volume, beat phase, and flash-active state
-- `GET /api/simulator/frame`: produce one simulator frame
+- `PATCH /api/simulator`: patch shared simulator input state used by runtime preview rendering
+- `GET /api/simulator/frame`: produce one runtime preview frame
 - `POST /api/simulator/sandbox-frame`: produce a dedicated simulator page frame from request-local controls without mutating runtime state
 - `GET /ws/simulator`: simulator frame and metrics stream
 
@@ -70,7 +71,7 @@ Stress tests cover:
 
 ## Configuration
 
-`dome-rs` native configuration is TOML. Runtime code loads TOML, not XML. Legacy Spectrum XML is handled only by the import command documented in [`configuration.md`](configuration.md).
+`dome-rs` native configuration is TOML. Runtime code loads TOML, not XML. Legacy Spectrum XML is handled only by the import command documented in [`configuration.md`](configuration.md). The runtime expands the TOML color-palette banks and shared entries into Spectrum's 64 absolute palette slots before visualizers render.
 
 ## Simulator Preview
 

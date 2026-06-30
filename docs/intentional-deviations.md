@@ -14,13 +14,13 @@ cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml
 
 **Reason:** TOML is idiomatic in Rust, easy to diff, and strict enough for operator-edited config. The importer preserves migration from existing show configs while preventing stale XML fields from becoming runtime state.
 
-**Validation:** `domers-core` tests TOML round-trip behavior and XML import warnings. `tests/integration/config_cli.rs` verifies the CLI writes TOML.
+**Validation:** `domers-core` tests TOML round-trip behavior, shared-entry palette expansion, and XML import warnings. `tests/config_cli.rs` verifies the CLI writes TOML and that the Spectrum XML fixture produces the checked `examples/domers.toml`.
 
 ## Madmom Sidecar Packaging
 
 **Spectrum:** The Windows app searches upward from the assembly for `Madmom/env/Scripts/python.exe`, starts `DBNBeatTracker --host_api --audio_input=<index> online`, and parses `BEAT:{seconds}` stdout lines.
 
-**dome-rs:** The beat protocol remains `BEAT:{seconds}`. `domers-inputs` provides a managed sidecar wrapper for the same `DBNBeatTracker --host_api --audio_input=<index> online` launch contract. Packaging is more flexible: the configured command can point at a bundled Python environment, wrapper script, system install, Docker launcher, or native replacement.
+**dome-rs:** The beat protocol remains `BEAT:{seconds}`. `domers-inputs` provides a managed sidecar wrapper for the same `DBNBeatTracker --host_api --audio_input=<index> online` launch contract. Packaging is more flexible: the configured command can point at a bundled Python environment, wrapper script, system install, Docker launcher, or native replacement. The source repo does not require a Madmom git submodule.
 
 **Reason:** The old virtualenv path is a Windows packaging detail, not the feature. The feature is managed beat tracking: start with the selected audio input, restart on relevant config changes, parse beat timestamps, and feed the beat engine.
 
@@ -44,7 +44,7 @@ cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml
 
 **Reason:** Snapshot/event flow avoids torn config reads when browser controls, MIDI events, and visualizer rendering happen concurrently.
 
-**Validation:** Tests cover deterministic scheduler and server state behavior. Remaining stress coverage: concurrent config patching, MIDI replay, and simulator frame generation.
+**Validation:** Tests cover deterministic scheduler and server state behavior, including config patching during frame production, MIDI replay paths, and simulator frame generation. Remaining stress coverage belongs in longer soak/load tests.
 
 ## Timing Targets Kept From Spectrum
 

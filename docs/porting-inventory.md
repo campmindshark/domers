@@ -18,11 +18,11 @@ Selectable dome modes:
 - `LEDDomeQuaternionMultiTestVisualizer`: selectable orientation test mode.
 - `LEDDomeQuaternionPaintbrushVisualizer`: orientation paintbrush mode, buffer output.
 - `LEDDomeSplatVisualizer`: audio splat mode, buffer output.
+- `LEDDomeTVStaticVisualizer`: deterministic static mode, selectable in `dome-rs` for simulator/operator visibility.
 
 Other live modes:
 
 - `LEDDomeFlashVisualizer`: MIDI flash overlay via priority-2 tie.
-- `LEDDomeTVStaticVisualizer`: priority-1 dome fallback.
 - `LEDStageDepthLevelVisualizer`: live stage mode, using `TracerLEDIndex` helper.
 
 ## Support
@@ -65,7 +65,7 @@ Notes:
 TODO: Add image of Spectrum UI visualizer selector.
 
 - Capture: old Spectrum UI/VJ HUD showing dome active visualizer choices.
-- Expected: labels align with `domeActiveVis` values 0-7.
+- Expected: labels align with the current `domeActiveVis` selector, including TV Static.
 - Suggested file: `docs/images/inventory-spectrum-visualizer-selector.png`.
 
 TODO: Add image of diagnostic pattern selector.

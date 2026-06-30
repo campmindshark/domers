@@ -7,10 +7,12 @@
 - Browser control page served by the Rust binary at `/`.
 - Dedicated simulator page served at `/simulator`.
 - Runtime controls for engine start/stop, active dome visualizer, flash speed, active palette slot, and runtime palette colors.
+- Live Preview drawer that mirrors the runtime frame stream used for hardware output.
+- Independent `/simulator` sandbox with local controls that do not change runtime config or hardware output.
 - Dome simulator canvas streamed over WebSocket from engine frame data.
 - Spectrum-compatible dome topology and projection data for the full 7,580-LED dome layout.
 - Spectrum-compatible OPC packet encoding.
-- Native TOML configuration with a Spectrum XML import command.
+- Native TOML configuration with a Spectrum XML import command and shared-entry palette format.
 - Core input support for MIDI replay, audio volume replay, orientation datagram classification, tap tempo, and Madmom `BEAT:{seconds}` protocol parsing.
 - Managed Madmom sidecar launch wrapper using `DBNBeatTracker --host_api --audio_input=<index> online`.
 
@@ -59,8 +61,8 @@ See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette 
 - `POST /api/input/tap`: record one tap-tempo input
 - `GET /api/dome/geometry`: dome projection geometry
 - `GET /api/dome/mapping`: dome strut and LED mapping
-- `PATCH /api/simulator`: update simulator-only preview inputs
-- `GET /api/simulator/frame`: render one simulator frame
+- `PATCH /api/simulator`: update shared simulator input state used by runtime preview rendering
+- `GET /api/simulator/frame`: render one runtime preview frame
 - `POST /api/simulator/sandbox-frame`: render a simulator page frame without changing runtime state
 - `GET /ws/simulator`: stream simulator frames and metrics
 
@@ -89,5 +91,5 @@ node ui/check.mjs
 TODO: Add image of the MindShark Dome Controls page here.
 
 - Capture: full browser window at desktop size.
-- Expected: title, start/stop buttons, runtime controls, simulator preview inputs, metrics, stream status, and simulator canvas are visible.
+- Expected: title, start/stop buttons, runtime controls, metrics, stream status, and a closed Preview drawer are visible.
 - Suggested file: `docs/images/readme-operator-shell.png`.

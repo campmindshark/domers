@@ -49,6 +49,6 @@ TODO: Add image of bar routing/control box reference.
 
 TODO: Add image of stage side/layer reference.
 
-- Capture: stage simulator key or physical stage diagram.
+- Capture: physical stage diagram or future stage simulator key.
 - Expected: 48 sides and 3 layers are visually identifiable.
 - Suggested file: `docs/images/hardware-stage-side-layer-key.png`.
