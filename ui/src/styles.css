@@ -388,3 +388,103 @@ button:hover {
 .opc-targets-footer p {
   margin: 0.25rem 0;
 }
+
+@media (max-width: 720px) {
+  .app-shell-header {
+    align-items: stretch;
+    gap: 0.65rem;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .app-shell-header h1 {
+    font-size: 1.05rem;
+    width: 100%;
+  }
+
+  .engine-controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .engine-controls span {
+    grid-column: 1 / -1;
+  }
+
+  .app-shell-content {
+    padding: 0.65rem;
+  }
+
+  details,
+  fieldset,
+  .config-card,
+  .target-status {
+    padding: 0.7rem;
+  }
+
+  details,
+  fieldset {
+    margin: 0.65rem 0;
+  }
+
+  summary {
+    font-size: 1.05rem;
+  }
+
+  input:not([type='checkbox']),
+  select,
+  textarea,
+  button {
+    font-size: 1rem;
+    min-height: 2.65rem;
+  }
+
+  .config-section-grid,
+  .output-config-grid,
+  .palette-grid,
+  .status-grid,
+  .swatches {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inline-field-grid,
+  .side-lengths-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .slider-number-field {
+    gap: 0.45rem;
+    grid-template-columns: minmax(0, 1fr) 5.25rem;
+  }
+
+  .palette-entry {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .palette-entry label:last-child {
+    align-items: center;
+    padding-bottom: 0;
+  }
+
+  .opc-targets-footer {
+    max-height: 42vh;
+    padding: 0.65rem 0.75rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .inline-field-grid,
+  .side-lengths-grid,
+  .slider-number-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .config-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .config-actions span {
+    grid-column: 1 / -1;
+  }
+}

@@ -160,6 +160,8 @@ for (const marker of [
   '.side-lengths-grid',
   '.palette-color-input',
   'height: 3rem',
+  '@media (max-width: 720px)',
+  '@media (max-width: 420px)',
 ]) {
   if (!css.includes(marker) && !app.includes(marker)) {
     console.error(`Missing required shared CSS marker: ${marker}`);
