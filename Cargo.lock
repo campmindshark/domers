@@ -24,6 +24,11 @@ dependencies = [
 [[package]]
 name = "domers-server"
 version = "0.1.0"
+dependencies = [
+ "domers-core",
+ "domers-outputs",
+ "domers-visualizers",
+]
 
 [[package]]
 name = "domers-test-support"
