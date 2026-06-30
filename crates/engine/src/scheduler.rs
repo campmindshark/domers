@@ -43,15 +43,22 @@ pub fn schedule_visualizers(specs: &[VisualizerSpec]) -> ScheduledFrame {
     }
 
     active.extend(always);
-    ScheduledFrame { top_priority, active }
+    ScheduledFrame {
+        top_priority,
+        active,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{VisualizerSpec, schedule_visualizers};
+    use super::{schedule_visualizers, VisualizerSpec};
 
     fn v(name: &'static str, priority: i32) -> VisualizerSpec {
-        VisualizerSpec { name, priority, inputs_enabled: true }
+        VisualizerSpec {
+            name,
+            priority,
+            inputs_enabled: true,
+        }
     }
 
     #[test]
@@ -81,7 +88,11 @@ mod tests {
     #[test]
     fn disabled_inputs_block_visualizer() {
         let frame = schedule_visualizers(&[
-            VisualizerSpec { name: "volume", priority: 2, inputs_enabled: false },
+            VisualizerSpec {
+                name: "volume",
+                priority: 2,
+                inputs_enabled: false,
+            },
             v("tv-static", 1),
         ]);
         assert_eq!(frame.active, vec!["tv-static"]);

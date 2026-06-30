@@ -2,4 +2,4 @@
 
 pub mod scheduler;
 
-pub use scheduler::{ScheduledFrame, VisualizerSpec, schedule_visualizers};
+pub use scheduler::{schedule_visualizers, ScheduledFrame, VisualizerSpec};

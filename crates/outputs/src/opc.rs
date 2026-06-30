@@ -32,6 +32,9 @@ mod tests {
     #[test]
     fn encodes_spectrum_nonstandard_header_without_magic_prefix() {
         let encoded = encode_frame(2, &[Rgb::from_u24(0x12_34_56), Rgb::from_u24(0xaa_bb_cc)]);
-        assert_eq!(encoded, vec![2, 0, 0, 6, 0x12, 0x34, 0x56, 0xaa, 0xbb, 0xcc]);
+        assert_eq!(
+            encoded,
+            vec![2, 0, 0, 6, 0x12, 0x34, 0x56, 0xaa, 0xbb, 0xcc]
+        );
     }
 }

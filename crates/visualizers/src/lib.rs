@@ -22,15 +22,42 @@ pub struct VisualizerInventory {
 
 /// Initial reviewed visualizer inventory.
 pub const INVENTORY: &[VisualizerInventory] = &[
-    VisualizerInventory { name: "LEDDomeVolumeVisualizer", classification: Classification::Live },
-    VisualizerInventory { name: "LEDDomeFlashVisualizer", classification: Classification::Live },
-    VisualizerInventory { name: "LEDDomeRadialVisualizer", classification: Classification::Live },
-    VisualizerInventory { name: "LEDDomeRaceVisualizer", classification: Classification::Live },
-    VisualizerInventory { name: "LEDDomeSnakesVisualizer", classification: Classification::Live },
-    VisualizerInventory { name: "LEDDomeSplatVisualizer", classification: Classification::Live },
-    VisualizerInventory { name: "LEDStageDepthLevelVisualizer", classification: Classification::Live },
-    VisualizerInventory { name: "LEDDomeMidiTestVisualizer", classification: Classification::Dead },
-    VisualizerInventory { name: "LEDStageTracerVisualizer", classification: Classification::Dead },
+    VisualizerInventory {
+        name: "LEDDomeVolumeVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDDomeFlashVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDDomeRadialVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDDomeRaceVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDDomeSnakesVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDDomeSplatVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDStageDepthLevelVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDDomeMidiTestVisualizer",
+        classification: Classification::Dead,
+    },
+    VisualizerInventory {
+        name: "LEDStageTracerVisualizer",
+        classification: Classification::Dead,
+    },
 ];
 
 #[cfg(test)]
@@ -39,7 +66,13 @@ mod tests {
 
     #[test]
     fn records_confirmed_dead_visualizers() {
-        assert!(INVENTORY.iter().any(|v| v.name == "LEDDomeMidiTestVisualizer" && v.classification == Classification::Dead));
-        assert!(INVENTORY.iter().any(|v| v.name == "LEDStageTracerVisualizer" && v.classification == Classification::Dead));
+        assert!(INVENTORY
+            .iter()
+            .any(|v| v.name == "LEDDomeMidiTestVisualizer"
+                && v.classification == Classification::Dead));
+        assert!(INVENTORY
+            .iter()
+            .any(|v| v.name == "LEDStageTracerVisualizer"
+                && v.classification == Classification::Dead));
     }
 }

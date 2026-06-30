@@ -28,7 +28,7 @@ pub fn classify_datagram(bytes: &[u8]) -> Option<DatagramKind> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DatagramKind, classify_datagram};
+    use super::{classify_datagram, DatagramKind};
 
     #[test]
     fn classifies_known_lengths() {

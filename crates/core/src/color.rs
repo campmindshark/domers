@@ -37,7 +37,11 @@ impl Rgb {
         fn ch(value: u8, factor: f32) -> u8 {
             ((value as f32 * factor).clamp(0.0, 255.0)).round() as u8
         }
-        Self { r: ch(self.r, factor), g: ch(self.g, factor), b: ch(self.b, factor) }
+        Self {
+            r: ch(self.r, factor),
+            g: ch(self.g, factor),
+            b: ch(self.b, factor),
+        }
     }
 }
 
@@ -48,7 +52,14 @@ mod tests {
     #[test]
     fn converts_spectrum_packed_rgb() {
         let rgb = Rgb::from_u24(0x12_34_56);
-        assert_eq!(rgb, Rgb { r: 0x12, g: 0x34, b: 0x56 });
+        assert_eq!(
+            rgb,
+            Rgb {
+                r: 0x12,
+                g: 0x34,
+                b: 0x56
+            }
+        );
         assert_eq!(rgb.to_u24(), 0x12_34_56);
     }
 

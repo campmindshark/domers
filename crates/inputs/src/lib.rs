@@ -4,4 +4,4 @@ pub mod madmom;
 pub mod orientation;
 
 pub use madmom::parse_beat_line;
-pub use orientation::{DatagramKind, classify_datagram};
+pub use orientation::{classify_datagram, DatagramKind};
