@@ -1,4 +1,4 @@
-//! Simulator command protocol matching Spectrum's LEDCommand structs.
+//! Simulator command protocol matching Spectrum's `LEDCommand` structs.
 
 use domers_core::Rgb;
 

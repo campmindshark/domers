@@ -16,6 +16,12 @@ impl BeatClock {
 
     /// Returns progress through a beat-like period in `[0.0, 1.0)`.
     #[must_use]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss,
+        reason = "Beat progress mirrors Spectrum's floating timing controls and clamps the period before integer modulo"
+    )]
     pub fn progress(&self, now_ms: u64, factor: f64) -> f64 {
         if self.beat_ms == 0 || factor == 0.0 {
             return 0.0;
@@ -35,11 +41,15 @@ impl Default for BeatClock {
 mod tests {
     use super::BeatClock;
 
+    fn assert_close(left: f64, right: f64) {
+        assert!((left - right).abs() < f64::EPSILON);
+    }
+
     #[test]
     fn reports_progress_through_beat() {
         let clock = BeatClock::new(1_000, 100);
-        assert_eq!(clock.progress(100, 1.0), 0.0);
-        assert_eq!(clock.progress(600, 1.0), 0.5);
-        assert_eq!(clock.progress(1_100, 1.0), 0.0);
+        assert_close(clock.progress(100, 1.0), 0.0);
+        assert_close(clock.progress(600, 1.0), 0.5);
+        assert_close(clock.progress(1_100, 1.0), 0.0);
     }
 }

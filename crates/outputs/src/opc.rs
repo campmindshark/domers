@@ -6,15 +6,19 @@
 use domers_core::Rgb;
 
 /// Encode one non-standard Spectrum OPC frame chunk.
+///
+/// # Panics
+///
+/// Panics if the encoded RGB payload exceeds `u16::MAX`, which is the maximum
+/// length representable in the OPC frame header.
 #[must_use]
 pub fn encode_frame(channel: u8, pixels: &[Rgb]) -> Vec<u8> {
     let byte_len = pixels.len() * 3;
-    assert!(byte_len <= u16::MAX as usize, "OPC chunk too large");
-    let mut out = Vec::with_capacity(4 + byte_len);
+    let byte_len = u16::try_from(byte_len).expect("OPC chunk too large");
+    let mut out = Vec::with_capacity(4 + usize::from(byte_len));
     out.push(channel);
     out.push(0);
-    out.push(((byte_len >> 8) & 0xff) as u8);
-    out.push((byte_len & 0xff) as u8);
+    out.extend(byte_len.to_be_bytes());
     for pixel in pixels {
         out.push(pixel.r);
         out.push(pixel.g);

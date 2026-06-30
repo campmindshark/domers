@@ -2,6 +2,11 @@
 
 /// Parse a `BEAT:{seconds}` stdout line into milliseconds.
 #[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Madmom emits fractional seconds; Spectrum truncates to integer milliseconds"
+)]
 pub fn parse_beat_line(line: &str) -> Option<u64> {
     let value = line.strip_prefix("BEAT:")?;
     let seconds = value.trim().parse::<f64>().ok()?;

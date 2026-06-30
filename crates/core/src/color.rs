@@ -34,8 +34,13 @@ impl Rgb {
     /// Scale by brightness, clamping into displayable RGB.
     #[must_use]
     pub fn scale(self, factor: f32) -> Self {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "RGB protocol values are clamped before conversion back to u8"
+        )]
         fn ch(value: u8, factor: f32) -> u8 {
-            ((value as f32 * factor).clamp(0.0, 255.0)).round() as u8
+            ((f32::from(value) * factor).clamp(0.0, 255.0)).round() as u8
         }
         Self {
             r: ch(self.r, factor),
