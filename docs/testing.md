@@ -1,6 +1,6 @@
 # Testing
 
-Every ordinary test must run without lighting hardware. Hardware validation gates releases, not normal PRs.
+The automated suite covers deterministic runtime behavior, protocol encoding, config migration, and the browser shell. Hardware validation is a release checklist item.
 
 ## PR Fast
 
@@ -18,10 +18,12 @@ node ui/check.mjs
 - OPC non-standard frame encoding and persistent sparse flush behavior.
 - Simulator command emission with hardware disabled.
 - Fake audio, MIDI, orientation, and Madmom beat inputs.
+- Madmom sidecar launch argument and disabled-lifecycle behavior.
+- Spectrum-compatible 64-entry palette indexing and gradient blending.
 - Visualizer simulator-frame harness for live dome modes.
-- Server state contract for config patching, start/stop, metrics, and simulator frames.
-- HTTP adapter smoke coverage for UI, state, and start routes.
-- UI smoke markers for API/WebSocket wiring, pixel rendering, palette controls, and simulator controls.
+- Server state contract for runtime config patching, palette patching, start/stop, metrics, and simulator frames.
+- HTTP adapter smoke coverage for UI, state, geometry, mapping, and start routes.
+- UI smoke markers for API/WebSocket wiring, pixel rendering, runtime palette controls, and simulator controls.
 
 Tests for intentional behavior changes cite
 [`intentional-deviations.md`](intentional-deviations.md) so preservation and
@@ -35,7 +37,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 node ui/check.mjs
 ```
 
-Live no-hardware smoke:
+Live local smoke:
 
 ```sh
 cargo run --bin domers -- --config examples/domers.toml --bind 127.0.0.1:3000
@@ -45,7 +47,7 @@ Then open `http://127.0.0.1:3000`, click `Start`, and confirm the metrics advanc
 
 ## PR Full And Nightly
 
-Next additions: deeper fixture golden tests, Docker Compose OPC loopback services, fake Madmom sidecar process tests, fake orientation sender services, visualizer frame hash snapshots, browser automation, and load tests.
+Next additions: deeper fixture golden tests, Docker Compose OPC loopback services, Madmom stdout-to-beat runtime tests, fake orientation sender services, visualizer frame hash snapshots, browser automation, and load tests.
 
 ## Manual Hardware Checklist
 

@@ -1,12 +1,12 @@
 # Intentional Deviations From Spectrum
 
-This document separates deliberate Domers design choices from the architecture of the Rust app itself. If Domers intentionally differs from the C# Spectrum app, record the reason and the validation path here.
+This document separates deliberate `dome-rs` design choices from the architecture of the Rust app itself. If `dome-rs` intentionally differs from the C# Spectrum app, record the reason and the validation path here.
 
 ## Native Config Format
 
 **Spectrum:** Runtime configuration is XML (`spectrum_config.xml` / `spectrum_default_config.xml`).
 
-**Domers:** Runtime configuration is TOML. XML is import-only via:
+**dome-rs:** Runtime configuration is TOML. XML is import-only via:
 
 ```sh
 cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml>
@@ -20,17 +20,17 @@ cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml
 
 **Spectrum:** The Windows app searches upward from the assembly for `Madmom/env/Scripts/python.exe`, starts `DBNBeatTracker --host_api --audio_input=<index> online`, and parses `BEAT:{seconds}` stdout lines.
 
-**Domers:** The beat protocol remains `BEAT:{seconds}` and Domers still owns sidecar lifecycle. The packaging is more flexible: the configured command can point at a bundled Python environment, wrapper script, system install, Docker launcher, or native replacement.
+**dome-rs:** The beat protocol remains `BEAT:{seconds}`. `domers-inputs` provides a managed sidecar wrapper for the same `DBNBeatTracker --host_api --audio_input=<index> online` launch contract. Packaging is more flexible: the configured command can point at a bundled Python environment, wrapper script, system install, Docker launcher, or native replacement.
 
 **Reason:** The old virtualenv path is a Windows packaging detail, not the feature. The feature is managed beat tracking: start with the selected audio input, restart on relevant config changes, parse beat timestamps, and feed the beat engine.
 
-**Validation:** `domers-inputs` parses valid and malformed `BEAT:` lines; `domers-core` tests Madmom beat timing windows. Full parity also needs sidecar process lifecycle tests.
+**Validation:** `domers-inputs` parses valid and malformed `BEAT:` lines and tests sidecar launch arguments plus disabled lifecycle behavior. `domers-core` tests Madmom beat timing windows. Remaining coverage: feeding sidecar stdout into live beat state inside the server runtime.
 
 ## Browser Simulator Source
 
 **Spectrum:** WPF simulator windows consume command queues in-process and redraw on timer ticks. The dome simulator timer runs every 10 ms in the WPF window.
 
-**Domers:** Browser simulator frames come from the engine/server simulator stream. The browser does not read OPC hardware sockets.
+**dome-rs:** Browser simulator frames come from the engine/server simulator stream. The browser does not read OPC hardware sockets.
 
 **Reason:** The simulator needs to run without hardware and display intended engine output, not network side effects.
 
@@ -40,7 +40,7 @@ cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml
 
 **Spectrum:** WPF controls, MIDI callbacks, timers, and operator code share a mutable config object with property-change notifications.
 
-**Domers:** The engine uses frame-local config snapshots and event channels for UI edits and input events.
+**dome-rs:** The engine uses frame-local config snapshots and event channels for UI edits and input events.
 
 **Reason:** Snapshot/event flow avoids torn config reads when browser controls, MIDI events, and visualizer rendering happen concurrently.
 
@@ -48,7 +48,7 @@ cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml
 
 ## Timing Targets Kept From Spectrum
 
-Domers keeps the 400 Hz engine compute cap and 200 Hz OPC send cap as compatibility targets, but implements them in Rust with explicit tests rather than copying WPF/Thread behavior.
+`dome-rs` keeps the 400 Hz engine compute cap and 200 Hz OPC send cap as compatibility targets, but implements them in Rust with explicit tests rather than copying WPF/Thread behavior.
 
 **Source citations:**
 

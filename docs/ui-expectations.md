@@ -14,9 +14,9 @@ Expected elements:
 - WebSocket stream status text
 - `domeActiveVis` selector with Volume, Radial, Race, Snakes, Quaternion Test, Quaternion Multi Test, Quaternion Paintbrush, and Splat
 - `flashSpeed` slider
-- simulator volume, beat phase, and flash-active controls
 - eight palette slots matching Spectrum's VJ HUD selection
-- primary, secondary, and accent color controls for the selected simulator palette
+- runtime palette color controls for entries 1-3 in the selected palette slot
+- simulator volume, beat phase, and flash-active controls
 - frame and simulator-frame metrics
 - `dome-simulator` canvas using the WebSocket frame source
 
@@ -47,6 +47,8 @@ TODO: Add image of running state.
 Expected behavior when selecting each dome visualizer:
 
 - selected value matches the server config field `dome.active_visualizer`
+- flash speed and palette slot update server runtime config
+- palette color edits patch `config.color_palette` through `/api/config/palette`
 - simulator frame stream updates after the selection is applied
 - invalid values are rejected after API config validation is tightened
 
@@ -71,13 +73,13 @@ TODO: Add image of a non-empty dome simulator frame.
 - Expected: visible colored points/struts, with the selected visualizer noted in the caption.
 - Suggested file: `docs/images/ui-dome-simulator-frame.png`.
 
-## Remaining Parity Controls
+## Control Backlog
 
-These controls are not cuts. They need the same treatment as the palette preview controls: API state, UI binding, simulator evidence, and tests.
+These controls are not cuts. They need API state, UI binding, simulator evidence, and tests.
 
 - config editor
 - MIDI log
-- full 64-entry Spectrum color palette editor
+- full 64-entry Spectrum color palette editor, including gradient color2 controls
 - dome volume rotation speed
 - dome gradient speed
 - dome global fade speed

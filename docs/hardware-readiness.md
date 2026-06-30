@@ -1,6 +1,6 @@
 # Hardware Readiness Checklist
 
-Hardware validation gates release tags, not ordinary pull requests. Complete this checklist after the no-hardware CI suite is green.
+Hardware validation gates release tags. Complete this checklist after the automated CI suite is green.
 
 ## Preflight
 

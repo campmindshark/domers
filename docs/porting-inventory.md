@@ -1,7 +1,7 @@
 # Porting Inventory
 
 This document tracks live, support, and dead Spectrum behavior for the Rust rewrite.
-When Domers intentionally replaces Spectrum behavior rather than porting it,
+When `dome-rs` intentionally replaces Spectrum behavior rather than porting it,
 record the decision in [`intentional-deviations.md`](intentional-deviations.md).
 
 ## Live Visualizers

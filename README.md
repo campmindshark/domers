@@ -1,24 +1,58 @@
-# Domers
+# dome-rs
 
-Rust port of [Spectrum](https://github.com/campmindshark/spectrum).
+`dome-rs` is a Rust lighting control server for the MindShark dome. It ports the active parts of [Spectrum](https://github.com/campmindshark/spectrum) into a headless runtime with a browser control surface, a dome simulator, Spectrum-compatible OPC encoding, TOML configuration, and input support for MIDI, audio, orientation, tap tempo, and Madmom beat protocol handling.
 
-## Status
+## Features
 
-Domers runs without lighting hardware:
+- Browser control page served by the Rust binary at `/`.
+- Runtime controls for engine start/stop, active dome visualizer, flash speed, active palette slot, and runtime palette colors.
+- Dome simulator canvas streamed over WebSocket from engine frame data.
+- Spectrum-compatible dome topology and projection data for the full 7,580-LED dome layout.
+- Spectrum-compatible OPC packet encoding.
+- Native TOML configuration with a Spectrum XML import command.
+- Core input support for MIDI replay, audio volume replay, orientation datagram classification, tap tempo, and Madmom `BEAT:{seconds}` protocol parsing.
+- Managed Madmom sidecar launch wrapper using `DBNBeatTracker --host_api --audio_input=<index> online`.
 
-- TOML config loading from `examples/domers.toml` or an imported config
-- HTTP API for health, state, start, stop, and dome visualizer config
-- WebSocket simulator frame stream
-- browser operator shell served by the Rust binary
-- tested scheduler, OPC, input, simulator, visualizer, migration, and server paths
-
-Run locally:
+## Quick Start
 
 ```sh
 cargo run --bin domers -- --config examples/domers.toml --bind 127.0.0.1:3000
 ```
 
-Then open `http://127.0.0.1:3000`.
+Open `http://127.0.0.1:3000` and use **MindShark Dome Controls**.
+
+## Configuration
+
+Copy the starter config:
+
+```sh
+cp examples/domers.toml domers.toml
+```
+
+Import an existing Spectrum XML config:
+
+```sh
+cargo run --bin domers-config -- import-spectrum-xml \
+  fixtures/config/spectrum_default_config.xml \
+  domers.toml
+```
+
+See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette format, and import behavior.
+
+## API Surface
+
+- `GET /`: browser controls
+- `GET /api/health`: health JSON
+- `GET /api/state`: current runtime state, config, metrics, and simulator inputs
+- `POST /api/start`: start the engine loop
+- `POST /api/stop`: stop the engine loop
+- `PATCH /api/config/dome`: update dome runtime controls
+- `PATCH /api/config/palette`: update one runtime palette color
+- `GET /api/dome/geometry`: dome projection geometry
+- `GET /api/dome/mapping`: dome strut and LED mapping
+- `PATCH /api/simulator`: update simulator-only preview inputs
+- `GET /api/simulator/frame`: render one simulator frame
+- `GET /ws/simulator`: stream simulator frames and metrics
 
 ## Development
 
@@ -29,60 +63,21 @@ cargo test --workspace
 node ui/check.mjs
 ```
 
-## Configuration
+## Documentation
 
-Domers uses TOML for native configuration. Start from the checked example:
+- [Architecture](docs/architecture.md)
+- [Configuration](docs/configuration.md)
+- [UI expectations](docs/ui-expectations.md)
+- [Testing](docs/testing.md)
+- [Hardware mapping](docs/hardware-mapping.md)
+- [Hardware readiness](docs/hardware-readiness.md)
+- [Porting inventory](docs/porting-inventory.md)
+- [Intentional deviations from Spectrum](docs/intentional-deviations.md)
 
-```sh
-cp examples/domers.toml domers.toml
-```
+## TODO Images
 
-Spectrum XML is supported only as a legacy import source:
-
-```sh
-cargo run --bin domers-config -- import-spectrum-xml \
-  fixtures/config/spectrum_default_config.xml \
-  domers.toml
-```
-
-The importer writes a new Domers TOML file and prints warnings for stale Spectrum fields, inert v1 cuts, and invalid MIDI binding targets.
-
-Example TOML output shape:
-
-```toml
-[dome]
-enabled = true
-simulation_enabled = false
-opc_address = "192.168.1.69:7890"
-active_visualizer = 0
-test_pattern = 0
-brightness = 0.356915762888129
-
-[tempo]
-source = "human"
-flash_speed = 0.0
-
-[madmom]
-command = "DBNBeatTracker"
-audio_input_index = 0
-```
-
-See [`docs/configuration.md`](docs/configuration.md) for the full config/import contract.
-Intentional differences from Spectrum are tracked in
-[`docs/intentional-deviations.md`](docs/intentional-deviations.md).
-
-## Madmom
-
-Spectrum managed Madmom for the operator: it found the bundled tracker, started it with the selected audio device, restarted it when beat/audio settings changed, and parsed `BEAT:{seconds}` lines from stdout. Domers needs the same managed sidecar behavior, without baking in the old Windows virtualenv path. The release can ship Madmom as a Python environment, wrapper script, Docker sidecar, or native package; the runtime contract stays the same beat-event stream.
-
-## UI
-
-The browser shell exposes engine start/stop, dome visualizer selection, flash speed, simulator input controls, palette preview controls, metrics, and a WebSocket-backed dome simulator canvas. See [`docs/ui-expectations.md`](docs/ui-expectations.md) for expected UI states, remaining parity controls, and image placeholders.
-
-TODO: Add image of the Domers operator page here.
+TODO: Add image of the MindShark Dome Controls page here.
 
 - Capture: full browser window at desktop size.
-- Expected: title, start/stop buttons, dome visualizer selector, flash speed slider, simulator controls, palette controls, metrics, stream status, and simulator canvas are visible.
+- Expected: title, start/stop buttons, runtime controls, simulator preview inputs, metrics, stream status, and simulator canvas are visible.
 - Suggested file: `docs/images/readme-operator-shell.png`.
-
-Local Docker/Rust may not be installed on every workstation; GitHub Actions is the merge-blocking source of truth.

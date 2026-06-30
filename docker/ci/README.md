@@ -1,21 +1,21 @@
 # CI Docker Harness
 
-This directory will hold no-hardware integration services:
+This directory documents the Docker loopback services used for CI expansion:
 
 - OPC TCP listener
 - fake Madmom sidecar
 - fake orientation UDP emitter
 - integration runner
 
-CI validates the layout now. Docker Compose services can replace this placeholder as loopback coverage grows.
+CI validates the layout now. Docker Compose services can replace this scaffold as loopback coverage grows.
 
-## Planned Example
+## Example
 
 ```sh
 docker compose -f docker/ci/docker-compose.yml up --abort-on-container-exit
 ```
 
-Planned services:
+Target services:
 
 ```text
 server-under-test -> opc-listener

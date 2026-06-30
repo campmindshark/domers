@@ -1,16 +1,16 @@
 # Architecture
 
-Domers is a headless Rust engine with browser control and simulator views.
+`dome-rs` is a headless Rust lighting control runtime with browser controls and simulator views.
 
 ## Crates
 
-- `domers-core`: shared colors, beat timing, config types, TOML config import, and migration warnings.
+- `domers-core`: shared colors, Spectrum palette semantics, beat timing, config types, TOML config import, and migration warnings.
 - `domers-engine`: scheduler and frame orchestration.
 - `domers-outputs`: dome/bar/stage commands, topology, simulator sinks, and OPC encoding.
-- `domers-inputs`: Madmom, MIDI, audio, and orientation seams.
+- `domers-inputs`: Madmom protocol parsing and sidecar launch wrapper, MIDI replay, audio replay, and orientation datagram classification.
 - `domers-visualizers`: visualizer inventory and deterministic simulator frame harness.
 - `domers-server`: HTTP/WebSocket contract surface and state semantics.
-- `domers-test-support`: fake clocks and no-hardware test utilities.
+- `domers-test-support`: fake clocks and deterministic test utilities.
 
 ## Runtime Shape
 
@@ -27,15 +27,20 @@ The browser simulator is driven by engine frame data. It does not read back from
 
 The server crate implements both the in-process `ServerState` contract and the runnable HTTP/WebSocket adapter. The `domers` binary loads TOML config, serves the browser shell, exposes JSON API endpoints, and streams simulator frames over WebSocket.
 
-Network surface:
+HTTP and WebSocket surface:
 
 - `GET /`: browser operator shell
 - `GET /main.mjs`: browser control script
 - `GET /api/health`: health JSON
-- `GET /api/state`: running state, engine config, and metrics
+- `GET /api/state`: running state, engine config, simulator inputs, and metrics
 - `POST /api/start`: start the engine loop
 - `POST /api/stop`: stop the engine loop
-- `PATCH /api/config/dome`: patch dome visualizer config
+- `PATCH /api/config/dome`: patch runtime dome controls: active visualizer, flash speed, and palette slot
+- `PATCH /api/config/palette`: patch one runtime palette color in the active palette bank
+- `GET /api/dome/geometry`: Spectrum-derived dome projection geometry
+- `GET /api/dome/mapping`: Spectrum-derived dome strut/LED mapping
+- `PATCH /api/simulator`: patch simulator-only preview inputs: volume, beat phase, and flash-active state
+- `GET /api/simulator/frame`: produce one simulator frame
 - `GET /ws/simulator`: simulator frame and metrics stream
 
 ## Timing Contracts
@@ -63,15 +68,15 @@ Stress tests cover:
 
 ## Configuration
 
-Domers-native configuration is TOML. Runtime code loads TOML, not XML. Legacy Spectrum XML is handled only by the import command documented in [`configuration.md`](configuration.md).
+`dome-rs` native configuration is TOML. Runtime code loads TOML, not XML. Legacy Spectrum XML is handled only by the import command documented in [`configuration.md`](configuration.md).
 
 ## Beat Input
 
-The beat engine accepts beat events from tap tempo, fake tests, and the Madmom-compatible sidecar. Domers owns sidecar lifecycle and consumes beat events; packaging decides whether the sidecar is a bundled Python environment, wrapper script, system install, Docker launcher, or native replacement.
+The beat engine accepts beat events from tap tempo, fake tests, and Madmom-compatible `BEAT:{seconds}` lines. `domers-inputs` includes a managed sidecar wrapper for the Spectrum launch contract. Server-side wiring from that child process into live beat state is separate runtime work.
 
 ## Intentional Deviations
 
-Spectrum compatibility decisions and explicit differences are tracked in [`intentional-deviations.md`](intentional-deviations.md). Keep this file focused on Domers architecture; put historical comparisons and deliberate departures there.
+Spectrum compatibility decisions and explicit differences are tracked in [`intentional-deviations.md`](intentional-deviations.md). Keep this file focused on `dome-rs` architecture; put historical comparisons and deliberate departures there.
 
 ## TODO Images
 

@@ -1,13 +1,13 @@
 # Configuration
 
-Domers uses TOML as its native runtime configuration format. XML is not a runtime configuration format for the Rust app. Spectrum XML is only accepted by the import command so existing show/laptop configs can be migrated intentionally.
+`dome-rs` uses TOML as its native runtime configuration format. XML is not a runtime configuration format for the Rust app. Spectrum XML is accepted by the import command so existing show/laptop configs can be migrated intentionally.
 
 Intentional differences from Spectrum runtime config are tracked in
 [`intentional-deviations.md`](intentional-deviations.md).
 
 ## Native TOML
 
-A Domers config is organized into fixture and subsystem sections:
+A `dome-rs` config is organized into fixture and subsystem sections:
 
 Use `examples/domers.toml` as the checked starter config:
 
@@ -48,23 +48,46 @@ flash_speed = 0.0
 [madmom]
 command = "DBNBeatTracker"
 audio_input_index = 0
+
+[[color_palette.colors]]
+color1 = 65280
+color2 = 0
+color2_enabled = false
 ```
 
 TOML fits the project well: it is common in Rust, easy to diff, and strict enough for operator-edited config.
 
+## Color Palette
+
+The runtime palette follows Spectrum's layout: eight palette banks with eight entries each, stored as 64 entries in absolute index order.
+
+```toml
+[[color_palette.colors]]
+color1 = 16711680
+color2 = 15792383
+color2_enabled = true
+```
+
+- `color1` and `color2` use Spectrum's `0xRRGGBB` integer convention.
+- `color2_enabled = false` makes the entry a solid `color1`.
+- `color2_enabled = true` enables Spectrum-compatible gradient blending.
+- Runtime palette slot `N` uses entries `N * 8` through `N * 8 + 7`.
+
+If `color_palette` is omitted, `dome-rs` creates a default 64-entry palette with visible starter colors in entries 0-2.
+
 ## Import Existing Spectrum XML
 
-Use `domers-config` to convert a Spectrum XML file into a Domers TOML file:
+Use `domers-config` to convert a Spectrum XML file into a `dome-rs` TOML file:
 
 ```sh
-cargo run --bin domers-config -- import-spectrum-xml   /path/to/spectrum_config.xml   domers.toml
+cargo run --bin domers-config -- import-spectrum-xml /path/to/spectrum_config.xml domers.toml
 ```
 
 The command:
 
 - reads the legacy Spectrum XML
 - maps live fields into the native TOML schema
-- writes a new Domers TOML file
+- writes a new `dome-rs` TOML file
 - prints warnings for stale Spectrum fields, inert v1 cuts, and invalid MIDI binding targets
 
 Example warnings:
@@ -78,7 +101,7 @@ warning: InertField: domeAutoFlashDelay
 
 ## Madmom Config
 
-Madmom remains a managed beat sidecar. For parity, Domers starts it, passes the selected audio input, restarts it when beat/audio settings change, and parses beat lines from stdout.
+Madmom remains a managed beat sidecar. The current input crate parses beat lines and includes a sidecar wrapper for Spectrum's launch contract.
 
 Old Spectrum behavior:
 
@@ -86,7 +109,7 @@ Old Spectrum behavior:
 Madmom/env/Scripts/python.exe DBNBeatTracker --host_api --audio_input=<index> online
 ```
 
-Domers config:
+`dome-rs` config:
 
 ```toml
 [madmom]
@@ -94,13 +117,19 @@ command = "DBNBeatTracker"
 audio_input_index = 0
 ```
 
-The command can point at a bundled Python environment, a wrapper script, a system install, a Docker sidecar launcher, or a native replacement. The stable runtime contract is stdout lines shaped like:
+The command can point at a bundled Python environment, a wrapper script, a system install, a Docker sidecar launcher, or a native replacement. The sidecar wrapper launches:
+
+```text
+<command> --host_api --audio_input=<index> online
+```
+
+The stable runtime contract is stdout lines shaped like:
 
 ```text
 BEAT:12.345
 ```
 
-Bundling Madmom is a release packaging choice, not a runtime path assumption. A packaged Domers build should include either a working Madmom distribution or a documented one-command installer so operators do not have to assemble the beat tracker by hand.
+Bundling Madmom is a release packaging choice, not a runtime path assumption. A packaged `dome-rs` build needs either a working Madmom distribution or a documented one-command installer so operators do not have to assemble the beat tracker by hand.
 
 See [`intentional-deviations.md`](intentional-deviations.md) for the rationale.
 
