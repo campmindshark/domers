@@ -12,11 +12,21 @@ const paletteIndex = document.querySelector('#palette-index');
 const palettePrimary = document.querySelector('#palette-primary');
 const paletteSecondary = document.querySelector('#palette-secondary');
 const paletteAccent = document.querySelector('#palette-accent');
+const sandboxActiveVisualizer = document.querySelector('#sandbox-dome-active-vis');
+const sandboxVolume = document.querySelector('#sandbox-volume');
+const sandboxVolumeValue = document.querySelector('#sandbox-volume-value');
+const sandboxBeatProgress = document.querySelector('#sandbox-beat-progress');
+const sandboxBeatProgressValue = document.querySelector('#sandbox-beat-progress-value');
+const sandboxFlashActive = document.querySelector('#sandbox-flash-active');
+const sandboxPalettePrimary = document.querySelector('#sandbox-palette-primary');
+const sandboxPaletteSecondary = document.querySelector('#sandbox-palette-secondary');
+const sandboxPaletteAccent = document.querySelector('#sandbox-palette-accent');
 const metricFrames = document.querySelector('#metric-frames');
 const metricSimulatorFrames = document.querySelector('#metric-simulator-frames');
 const previewDrawer = document.querySelector('#preview-drawer');
 const canvas = document.querySelector('#dome-simulator');
 const context = canvas?.getContext('2d');
+const isDedicatedSimulatorPage = document.body?.dataset.page === 'simulator';
 const SPECTRUM_CANVAS_SIZE = 750;
 const SPECTRUM_PROJECTION_OFFSET = 10;
 const SPECTRUM_PROJECTION_SPAN = 690;
@@ -239,8 +249,12 @@ function redrawLatestSimulatorFrame() {
 
 function handleSimulatorFrame(frame) {
   latestSimulatorFrame = frame;
-  metricFrames.textContent = String(frame.metrics.frames);
-  metricSimulatorFrames.textContent = String(frame.metrics.simulator_frames);
+  if (metricFrames) {
+    metricFrames.textContent = String(frame.metrics.frames);
+  }
+  if (metricSimulatorFrames) {
+    metricSimulatorFrames.textContent = String(frame.metrics.simulator_frames);
+  }
   resizeSimulatorCanvas();
   clearCanvas();
 
@@ -302,7 +316,39 @@ async function patchPaletteColor(relativeIndex, colorInput) {
 
 async function refreshPreviewFrame() {
   if (simulatorStarted) {
-    handleSimulatorFrame(await request('/api/simulator/frame'));
+    if (isDedicatedSimulatorPage) {
+      await refreshSandboxFrame();
+    } else {
+      handleSimulatorFrame(await request('/api/simulator/frame'));
+    }
+  }
+}
+
+async function refreshSandboxFrame() {
+  if (!canvas) {
+    return;
+  }
+  updateSandboxControlLabels();
+  handleSimulatorFrame(await request('/api/simulator/sandbox-frame', {
+    method: 'POST',
+    body: JSON.stringify({
+      active_visualizer: Number(sandboxActiveVisualizer?.value ?? 0),
+      volume: Number(sandboxVolume?.value ?? 0.7),
+      beat_progress: Number(sandboxBeatProgress?.value ?? 0.25),
+      flash_active: sandboxFlashActive?.checked ?? true,
+      primary: fromColorInput(sandboxPalettePrimary?.value ?? '#00ff00'),
+      secondary: fromColorInput(sandboxPaletteSecondary?.value ?? '#0080ff'),
+      accent: fromColorInput(sandboxPaletteAccent?.value ?? '#ff4080'),
+    }),
+  }));
+}
+
+function updateSandboxControlLabels() {
+  if (sandboxVolumeValue && sandboxVolume) {
+    sandboxVolumeValue.textContent = sandboxVolume.value;
+  }
+  if (sandboxBeatProgressValue && sandboxBeatProgress) {
+    sandboxBeatProgressValue.textContent = sandboxBeatProgress.value;
   }
 }
 
@@ -316,8 +362,15 @@ async function ensureSimulatorStarted() {
   } else {
     rebuildDomeLedPoints();
   }
-  handleSimulatorFrame(await request('/api/simulator/frame'));
-  connectSimulatorStream();
+  if (isDedicatedSimulatorPage) {
+    if (streamStatus) {
+      streamStatus.textContent = 'simulator sandbox';
+    }
+    await refreshSandboxFrame();
+  } else {
+    handleSimulatorFrame(await request('/api/simulator/frame'));
+    connectSimulatorStream();
+  }
 }
 
 function stopSimulatorPreview() {
@@ -406,6 +459,18 @@ for (const input of [
   });
 }
 
+for (const input of [
+  sandboxActiveVisualizer,
+  sandboxVolume,
+  sandboxBeatProgress,
+  sandboxFlashActive,
+  sandboxPalettePrimary,
+  sandboxPaletteSecondary,
+  sandboxPaletteAccent,
+]) {
+  input?.addEventListener('input', refreshSandboxFrame);
+}
+
 previewDrawer?.addEventListener('toggle', async () => {
   if (previewDrawer.open) {
     await ensureSimulatorStarted();
@@ -417,6 +482,6 @@ previewDrawer?.addEventListener('toggle', async () => {
 window.addEventListener('resize', redrawLatestSimulatorFrame);
 
 await refreshState();
-if (document.body?.dataset.page === 'simulator') {
+if (isDedicatedSimulatorPage) {
   await ensureSimulatorStarted();
 }

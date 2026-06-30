@@ -54,6 +54,7 @@ See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette 
 - `GET /api/dome/mapping`: dome strut and LED mapping
 - `PATCH /api/simulator`: update simulator-only preview inputs
 - `GET /api/simulator/frame`: render one simulator frame
+- `POST /api/simulator/sandbox-frame`: render a simulator page frame without changing runtime state
 - `GET /ws/simulator`: stream simulator frames and metrics
 
 ## Development

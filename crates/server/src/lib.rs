@@ -239,16 +239,7 @@ impl ServerState {
     pub fn simulator_frame(&mut self) -> Vec<DomeCommand> {
         self.metrics.frames = self.metrics.frames.saturating_add(1);
         self.metrics.simulator_frames = self.metrics.simulator_frames.saturating_add(1);
-        let visualizer = match self.config.dome_active_vis {
-            1 => LiveVisualizer::Radial,
-            2 => LiveVisualizer::Race,
-            3 => LiveVisualizer::Snakes,
-            4 => LiveVisualizer::QuaternionTest,
-            5 => LiveVisualizer::QuaternionMultiTest,
-            6 => LiveVisualizer::QuaternionPaintbrush,
-            7 => LiveVisualizer::Splat,
-            _ => LiveVisualizer::Volume,
-        };
+        let visualizer = visualizer_from_index(self.config.dome_active_vis);
         render_dome_visualizer(visualizer, self.simulator.visualizer_input(&self.config))
     }
 
@@ -306,6 +297,10 @@ impl AppRuntime {
             .route("/api/dome/mapping", get(dome_mapping))
             .route("/api/simulator", patch(patch_simulator_controls))
             .route("/api/simulator/frame", get(simulator_preview_frame))
+            .route(
+                "/api/simulator/sandbox-frame",
+                post(simulator_sandbox_frame),
+            )
             .route("/ws/simulator", get(simulator_websocket))
             .with_state(self)
     }
@@ -363,6 +358,22 @@ impl AppRuntime {
     pub async fn simulator_frame(&self) -> SimulatorFrame {
         let mut state = self.state.lock().await;
         let commands = state.simulator_frame();
+        SimulatorFrame {
+            metrics: state.metrics(),
+            commands: serialize_commands(commands),
+        }
+    }
+
+    /// Produce one simulator-only frame without mutating runtime config or controls.
+    pub async fn simulator_sandbox_frame(
+        &self,
+        request: SimulatorSandboxRequest,
+    ) -> SimulatorFrame {
+        let state = self.state.lock().await;
+        let commands = render_dome_visualizer(
+            visualizer_from_index(request.active_visualizer.unwrap_or(0)),
+            request.visualizer_input(),
+        );
         SimulatorFrame {
             metrics: state.metrics(),
             commands: serialize_commands(commands),
@@ -461,6 +472,38 @@ pub struct SimulatorControlsPatch {
     pub flash_active: Option<bool>,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize)]
+/// Dedicated simulator frame payload that never patches live runtime state.
+pub struct SimulatorSandboxRequest {
+    /// Active dome visualizer index for this simulator page only.
+    pub active_visualizer: Option<u8>,
+    /// Normalized audio volume preview.
+    pub volume: Option<f32>,
+    /// Beat phase preview in `[0.0, 1.0)`.
+    pub beat_progress: Option<f64>,
+    /// Whether the flash overlay is active.
+    pub flash_active: Option<bool>,
+    /// Primary preview color encoded as `0xRRGGBB`.
+    pub primary: Option<u32>,
+    /// Secondary preview color encoded as `0xRRGGBB`.
+    pub secondary: Option<u32>,
+    /// Accent/flash preview color encoded as `0xRRGGBB`.
+    pub accent: Option<u32>,
+}
+
+impl SimulatorSandboxRequest {
+    fn visualizer_input(self) -> VisualizerInput {
+        VisualizerInput {
+            volume: self.volume.unwrap_or(0.7).clamp(0.0, 1.0),
+            beat_progress: self.beat_progress.unwrap_or(0.25).clamp(0.0, 1.0),
+            flash_active: self.flash_active.unwrap_or(true),
+            primary: domers_core::Rgb::from_u24(self.primary.unwrap_or(0x00_ff_00)),
+            secondary: domers_core::Rgb::from_u24(self.secondary.unwrap_or(0x00_80_ff)),
+            accent: domers_core::Rgb::from_u24(self.accent.unwrap_or(0xff_40_80)),
+        }
+    }
+}
+
 async fn index_html() -> Html<&'static str> {
     Html(include_str!("../../../ui/index.html"))
 }
@@ -540,6 +583,13 @@ async fn simulator_preview_frame(State(runtime): State<AppRuntime>) -> Json<Simu
     Json(runtime.simulator_frame().await)
 }
 
+async fn simulator_sandbox_frame(
+    State(runtime): State<AppRuntime>,
+    Json(request): Json<SimulatorSandboxRequest>,
+) -> Json<SimulatorFrame> {
+    Json(runtime.simulator_sandbox_frame(request).await)
+}
+
 async fn simulator_websocket(
     websocket: WebSocketUpgrade,
     State(runtime): State<AppRuntime>,
@@ -578,6 +628,19 @@ fn serialize_commands(commands: Vec<DomeCommand>) -> Vec<SimulatorCommand> {
             },
         })
         .collect()
+}
+
+const fn visualizer_from_index(index: u8) -> LiveVisualizer {
+    match index {
+        1 => LiveVisualizer::Radial,
+        2 => LiveVisualizer::Race,
+        3 => LiveVisualizer::Snakes,
+        4 => LiveVisualizer::QuaternionTest,
+        5 => LiveVisualizer::QuaternionMultiTest,
+        6 => LiveVisualizer::QuaternionPaintbrush,
+        7 => LiveVisualizer::Splat,
+        _ => LiveVisualizer::Volume,
+    }
 }
 
 #[cfg(test)]
@@ -692,6 +755,49 @@ mod tests {
                 SimulatorCommand::Frame { .. } | SimulatorCommand::Pixel { .. }
             )
         }));
+    }
+
+    #[tokio::test]
+    async fn sandbox_frame_does_not_patch_runtime_state() {
+        let runtime = AppRuntime::default();
+        runtime
+            .patch_dome_config(super::DomeConfigPatch {
+                active_visualizer: Some(0),
+                flash_speed: Some(1.0),
+                color_palette_index: Some(0),
+            })
+            .await;
+        runtime
+            .patch_simulator_controls(super::SimulatorControlsPatch {
+                volume: Some(0.25),
+                beat_progress: Some(0.25),
+                flash_active: Some(false),
+            })
+            .await;
+
+        let before = runtime.snapshot().await;
+        let frame = runtime
+            .simulator_sandbox_frame(super::SimulatorSandboxRequest {
+                active_visualizer: Some(7),
+                volume: Some(1.0),
+                beat_progress: Some(0.9),
+                flash_active: Some(true),
+                primary: Some(0xff_00_00),
+                secondary: Some(0x00_ff_00),
+                accent: Some(0x00_00_ff),
+            })
+            .await;
+        let after = runtime.snapshot().await;
+
+        assert!(frame.commands.iter().any(|command| {
+            matches!(
+                command,
+                SimulatorCommand::Frame { .. } | SimulatorCommand::Pixel { .. }
+            )
+        }));
+        assert_eq!(before.config, after.config);
+        assert_eq!(before.simulator, after.simulator);
+        assert_eq!(before.metrics, after.metrics);
     }
 
     #[tokio::test]

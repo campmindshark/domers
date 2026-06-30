@@ -69,6 +69,15 @@ for (const marker of [
   'id="stream-status"',
   'id="dome-simulator"',
   'data-page="simulator"',
+  'aria-label="Simulator-Only Controls"',
+  'id="sandbox-dome-active-vis"',
+  'id="sandbox-volume"',
+  'id="sandbox-beat-progress"',
+  'id="sandbox-flash-active"',
+  'id="sandbox-palette-primary"',
+  'id="sandbox-palette-secondary"',
+  'id="sandbox-palette-accent"',
+  'do not patch live runtime config or hardware output',
 ]) {
   if (!simulatorHtml.includes(marker)) {
     console.error(`Missing required simulator page marker: ${marker}`);
@@ -87,6 +96,7 @@ for (const marker of [
   '/api/dome/mapping',
   '/api/simulator',
   '/api/simulator/frame',
+  '/api/simulator/sandbox-frame',
   '/ws/simulator',
   'command.kind === \'pixel\'',
   'buildDomeLedPoints',
@@ -95,6 +105,7 @@ for (const marker of [
   'SPECTRUM_CANVAS_SIZE',
   'resizeSimulatorCanvas',
   'ensureSimulatorStarted',
+  'refreshSandboxFrame',
   'stopSimulatorPreview',
   'window.addEventListener(\'resize\'',
 ]) {

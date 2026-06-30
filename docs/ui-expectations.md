@@ -62,12 +62,14 @@ TODO: Add image sequence of the visualizer selector.
 Expected simulator behavior:
 
 - `/simulator` is a dedicated simulator page
+- `/simulator` has simulator-only controls for visualizer, fake audio/beat inputs, flash overlay, and preview colors
+- changing `/simulator` controls does not patch live runtime config, shared simulator inputs, or hardware output
 - the live controls page starts simulator work only after opening the `Preview` drawer
 - dome canvas uses frame data from the server, not direct hardware state
 - per-pixel visualizers render visible pixels
 - buffer-based visualizers can render with OPC disabled
 - display color compensation is applied only to the UI view, never to OPC bytes
-- preview drawer shows simulator volume, beat phase, flash-active controls, frame metrics, stream status, and `dome-simulator`
+- preview drawer shows runtime-backed simulator volume, beat phase, flash-active controls, frame metrics, stream status, and `dome-simulator`
 
 TODO: Add image of a non-empty dome simulator frame.
 

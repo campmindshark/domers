@@ -42,6 +42,7 @@ HTTP and WebSocket surface:
 - `GET /api/dome/mapping`: Spectrum-derived dome strut/LED mapping
 - `PATCH /api/simulator`: patch simulator-only preview inputs: volume, beat phase, and flash-active state
 - `GET /api/simulator/frame`: produce one simulator frame
+- `POST /api/simulator/sandbox-frame`: produce a dedicated simulator page frame from request-local controls without mutating runtime state
 - `GET /ws/simulator`: simulator frame and metrics stream
 
 ## Timing Contracts
@@ -73,7 +74,7 @@ Stress tests cover:
 
 ## Simulator Preview
 
-The live control page keeps simulator work lazy. It fetches runtime state on load, then starts geometry/mapping requests, one preview frame request, and the simulator WebSocket only when the `Preview` drawer opens. The dedicated `/simulator` page starts the simulator immediately.
+The live control page keeps simulator work lazy. It fetches runtime state on load, then starts geometry/mapping requests, one preview frame request, and the simulator WebSocket only when the `Preview` drawer opens. The dedicated `/simulator` page starts the simulator immediately and uses request-local controls through `POST /api/simulator/sandbox-frame`, so changing that page does not change runtime config or hardware output.
 
 ## Beat Input
 
