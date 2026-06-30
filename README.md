@@ -25,7 +25,7 @@ Start the operator server with the checked example config:
 cargo run --bin domers -- run --config examples/domers.toml --bind 127.0.0.1:3000
 ```
 
-Open `http://127.0.0.1:3000` and use **MindShark Dome Controls**.
+Open `http://127.0.0.1:3000` and use **MindShark Dome Control Panel**.
 
 ## Hardware Startup
 
@@ -108,7 +108,7 @@ node ui/check.mjs
 
 ## TODO Images
 
-TODO: Add image of the MindShark Dome Controls page here.
+TODO: Add image of the MindShark Dome Control Panel page here.
 
 - Capture: full browser window at desktop size.
 - Expected: title, start/stop buttons, OPC Targets panel, runtime controls, metrics, stream status, and a closed Preview drawer are visible.

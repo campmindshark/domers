@@ -31,6 +31,7 @@ for (const path of required) {
 const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
 for (const marker of [
   'data-domers-app',
+  'MindShark Dome Control Panel',
   'aria-label="Runtime Controls"',
   'id="preview-drawer"',
   '<summary>Preview</summary>',

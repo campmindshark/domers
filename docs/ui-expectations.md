@@ -8,7 +8,7 @@ The shell lives in `ui/index.html` and is checked by `node ui/check.mjs`.
 
 Expected elements:
 
-- `MindShark Dome Controls` heading
+- `MindShark Dome Control Panel` heading
 - `Start` and `Stop` engine buttons
 - engine status text
 - `OPC Targets` panel showing dome/bar and stage target addresses, enabled state, connection state, successful frame count, and last error

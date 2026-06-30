@@ -1821,7 +1821,7 @@ mod tests {
             "GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
         )
         .await;
-        assert!(html.contains("MindShark Dome Controls"));
+        assert!(html.contains("MindShark Dome Control Panel"));
 
         let simulator = http_request(
             addr,
