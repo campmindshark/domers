@@ -7,6 +7,7 @@
 - Browser control page served by the Rust binary at `/`.
 - Dedicated simulator page served at `/simulator`.
 - Runtime controls for engine start/stop, active dome visualizer, flash speed, active palette slot, and runtime palette colors.
+- Support diagnostic controls for dome, bar, and stage hardware checks.
 - Live Preview drawer that mirrors the runtime frame stream used for hardware output.
 - Independent `/simulator` sandbox with local controls that do not change runtime config or hardware output.
 - Dome simulator canvas streamed over WebSocket from engine frame data.
@@ -75,6 +76,7 @@ See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette 
 - `POST /api/start`: start the engine loop
 - `POST /api/stop`: stop the engine loop
 - `PATCH /api/config/dome`: update dome runtime controls
+- `PATCH /api/config/diagnostics`: update dome, bar, and stage diagnostic/test-pattern controls
 - `PATCH /api/config/palette`: update one runtime palette color
 - `POST /api/input/tap`: record one tap-tempo input
 - `GET /api/dome/geometry`: dome projection geometry

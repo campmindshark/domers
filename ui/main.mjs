@@ -5,6 +5,9 @@ const hardwareStage = document.querySelector('#hardware-stage');
 const activeVisualizer = document.querySelector('#dome-active-vis');
 const flashSpeed = document.querySelector('#flash-speed');
 const flashSpeedValue = document.querySelector('#flash-speed-value');
+const domeTestPattern = document.querySelector('#dome-test-pattern');
+const barTestPattern = document.querySelector('#bar-test-pattern');
+const stageTestPattern = document.querySelector('#stage-test-pattern');
 const simVolume = document.querySelector('#sim-volume');
 const simVolumeValue = document.querySelector('#sim-volume-value');
 const simBeatProgress = document.querySelector('#sim-beat-progress');
@@ -81,6 +84,15 @@ function updateSnapshot(snapshot) {
   }
   if (paletteIndex) {
     paletteIndex.value = String(snapshot.config.color_palette_index);
+  }
+  if (domeTestPattern) {
+    domeTestPattern.value = String(snapshot.diagnostics?.dome_test_pattern ?? 0);
+  }
+  if (barTestPattern) {
+    barTestPattern.value = String(snapshot.diagnostics?.bar_test_pattern ?? 0);
+  }
+  if (stageTestPattern) {
+    stageTestPattern.value = String(snapshot.diagnostics?.stage_test_pattern ?? 0);
   }
   if (simVolume) {
     simVolume.value = String(snapshot.simulator.volume);
@@ -322,6 +334,19 @@ async function patchRuntimeControls() {
   await refreshPreviewFrame();
 }
 
+async function patchDiagnosticControls() {
+  const snapshot = await request('/api/config/diagnostics', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      dome_test_pattern: Number(domeTestPattern?.value ?? 0),
+      bar_test_pattern: Number(barTestPattern?.value ?? 0),
+      stage_test_pattern: Number(stageTestPattern?.value ?? 0),
+    }),
+  });
+  updateSnapshot(snapshot);
+  await refreshPreviewFrame();
+}
+
 async function patchPaletteColor(relativeIndex, colorInput) {
   const snapshot = await request('/api/config/palette', {
     method: 'PATCH',
@@ -452,6 +477,10 @@ for (const input of [activeVisualizer, flashSpeed, paletteIndex]) {
     }
     await patchRuntimeControls();
   });
+}
+
+for (const input of [domeTestPattern, barTestPattern, stageTestPattern]) {
+  input?.addEventListener('input', patchDiagnosticControls);
 }
 
 for (const [relativeIndex, input] of [

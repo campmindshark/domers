@@ -17,6 +17,7 @@ Expected elements:
 - `flashSpeed` slider
 - eight palette slots matching Spectrum's VJ HUD selection
 - runtime palette color controls for entries 1-3 in the selected palette slot
+- `Support Diagnostics` selectors for dome, bar, and stage test patterns
 - closed `Preview` drawer
 - link from the preview drawer to `/simulator`
 
@@ -50,6 +51,8 @@ Expected behavior when selecting each dome visualizer:
 - selected value matches the server config field `dome.active_visualizer`
 - flash speed and palette slot update server runtime config
 - palette color edits patch `config.color_palette` through `/api/config/palette`
+- support diagnostic selectors patch test-pattern fields through `/api/config/diagnostics`
+- dome support diagnostics override the active dome visualizer until switched back to `Off`
 - simulator frame stream updates after the selection is applied
 - invalid values are currently clamped server-side; tighter validation belongs with the config editor work
 

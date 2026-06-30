@@ -37,6 +37,7 @@ HTTP and WebSocket surface:
 - `POST /api/start`: start the engine loop
 - `POST /api/stop`: stop the engine loop
 - `PATCH /api/config/dome`: patch runtime dome controls: active visualizer, flash speed, and palette slot
+- `PATCH /api/config/diagnostics`: patch dome, bar, and stage diagnostic/test-pattern controls
 - `PATCH /api/config/palette`: patch one runtime palette color in the active palette bank
 - `POST /api/input/tap`: record one tap-tempo input
 - `GET /api/dome/geometry`: Spectrum-derived dome projection geometry

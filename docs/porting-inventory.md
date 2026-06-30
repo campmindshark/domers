@@ -27,6 +27,8 @@ Other live modes:
 
 ## Support
 
+Support classification means the visualizer is used for diagnostics, fixtures, or helper behavior rather than the normal dome VJ selector. Support visualizers are not dead code. Operators access the diagnostic support modes from the **Support Diagnostics** controls on the main page, which patch the `test_pattern` config fields.
+
 - `LEDDomeStrutIterationDiagnosticVisualizer`: dome diagnostic pattern.
 - `LEDDomeFlashColorsDiagnosticVisualizer`: dome diagnostic pattern.
 - `LEDDomeStrandTestDiagnosticVisualizer`: dome diagnostic pattern.
@@ -37,6 +39,15 @@ Other live modes:
 - Dome physical mapping and projection data.
 - `SimulatorUtils.GetComputerColor` display compensation.
 - `LEDStageTracerVisualizer.TracerLEDIndex` helper only.
+
+Diagnostic selector mapping:
+
+- Dome `test_pattern = 1`: Flash Colors.
+- Dome `test_pattern = 2`: Strut Iteration.
+- Dome `test_pattern = 3`: Strand Test.
+- Dome `test_pattern = 4`: Full Color Flash.
+- Bar `test_pattern = 1`: Flash Colors.
+- Stage `test_pattern = 1`: Flash Colors.
 
 ## Scheduler Rules
 

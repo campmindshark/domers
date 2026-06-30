@@ -138,6 +138,34 @@
           </div>
         </fieldset>
       </section>
+      <section aria-label="Support Diagnostics">
+        <h2>Support Diagnostics</h2>
+        <p>Diagnostics are support visualizers for hardware checks. Dome diagnostics override the selected dome visualizer while active.</p>
+        <label>
+          Dome diagnostic
+          <select id="dome-test-pattern" name="domeTestPattern">
+            <option value="0">Off</option>
+            <option value="1">Flash Colors</option>
+            <option value="2">Strut Iteration</option>
+            <option value="3">Strand Test</option>
+            <option value="4">Full Color Flash</option>
+          </select>
+        </label>
+        <label>
+          Bar diagnostic
+          <select id="bar-test-pattern" name="barTestPattern">
+            <option value="0">Off</option>
+            <option value="1">Flash Colors</option>
+          </select>
+        </label>
+        <label>
+          Stage diagnostic
+          <select id="stage-test-pattern" name="stageTestPattern">
+            <option value="0">Off</option>
+            <option value="1">Flash Colors</option>
+          </select>
+        </label>
+      </section>
       <details id="preview-drawer">
         <summary>Preview</summary>
         <p>This preview mirrors the live runtime frame stream used for hardware output. Open the independent sandbox at <a href="/simulator">/simulator</a>.</p>

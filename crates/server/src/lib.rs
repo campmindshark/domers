@@ -66,10 +66,23 @@ pub struct ServerSnapshot {
     pub metrics: Metrics,
     /// Simulator input and palette controls.
     pub simulator: SimulatorControls,
+    /// Runtime diagnostic/test-pattern controls.
+    pub diagnostics: DiagnosticControls,
     /// Hardware output connection status.
     pub hardware: HardwareStatus,
     /// Live input status and latest runtime values.
     pub inputs: InputStatus,
+}
+
+/// Diagnostic/test-pattern controls exposed through `/api/state`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct DiagnosticControls {
+    /// Active dome diagnostic pattern.
+    pub dome_test_pattern: u8,
+    /// Active bar diagnostic pattern.
+    pub bar_test_pattern: u8,
+    /// Active stage diagnostic pattern.
+    pub stage_test_pattern: u8,
 }
 
 /// Live input status exposed through `/api/state`.
@@ -258,6 +271,19 @@ impl ServerState {
         }
     }
 
+    /// Patch runtime diagnostic/test-pattern controls.
+    pub fn patch_diagnostics(&mut self, patch: DiagnosticConfigPatch) {
+        if let Some(dome_test_pattern) = patch.dome_test_pattern {
+            self.config.dome.test_pattern = dome_test_pattern.min(4);
+        }
+        if let Some(bar_test_pattern) = patch.bar_test_pattern {
+            self.config.bar.test_pattern = bar_test_pattern.min(1);
+        }
+        if let Some(stage_test_pattern) = patch.stage_test_pattern {
+            self.config.stage.test_pattern = stage_test_pattern.min(1);
+        }
+    }
+
     /// Patch one runtime color palette entry.
     pub fn patch_palette_entry(&mut self, patch: PaletteEntryPatch) {
         let absolute_index = ColorPalette::absolute_index(
@@ -394,8 +420,17 @@ impl ServerState {
             config: EngineConfig::from(&self.config),
             metrics: self.metrics,
             simulator: self.simulator,
+            diagnostics: self.diagnostic_controls(),
             hardware: HardwareStatus::default(),
             inputs: self.input_status(),
+        }
+    }
+
+    fn diagnostic_controls(&self) -> DiagnosticControls {
+        DiagnosticControls {
+            dome_test_pattern: self.config.dome.test_pattern,
+            bar_test_pattern: self.config.bar.test_pattern,
+            stage_test_pattern: self.config.stage.test_pattern,
         }
     }
 
@@ -480,6 +515,7 @@ impl AppRuntime {
             .route("/api/start", post(start_engine))
             .route("/api/stop", post(stop_engine))
             .route("/api/config/dome", patch(patch_dome_config))
+            .route("/api/config/diagnostics", patch(patch_diagnostics))
             .route("/api/config/palette", patch(patch_palette_entry))
             .route("/api/input/tap", post(tap_tempo))
             .route("/api/dome/geometry", get(dome_geometry))
@@ -542,6 +578,11 @@ impl AppRuntime {
     /// Patch dome runtime configuration.
     pub async fn patch_dome_config(&self, patch: DomeConfigPatch) {
         self.state.lock().await.patch_dome_config(patch);
+    }
+
+    /// Patch runtime diagnostic/test-pattern controls.
+    pub async fn patch_diagnostics(&self, patch: DiagnosticConfigPatch) {
+        self.state.lock().await.patch_diagnostics(patch);
     }
 
     /// Patch one runtime color palette entry.
@@ -832,6 +873,17 @@ pub struct DomeConfigPatch {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
+/// Runtime diagnostic/test-pattern patch payload.
+pub struct DiagnosticConfigPatch {
+    /// Dome diagnostic pattern.
+    pub dome_test_pattern: Option<u8>,
+    /// Bar diagnostic pattern: 0 off, 1 flash colors.
+    pub bar_test_pattern: Option<u8>,
+    /// Stage diagnostic pattern: 0 off, 1 flash colors.
+    pub stage_test_pattern: Option<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
 /// Runtime color palette patch payload.
 pub struct PaletteEntryPatch {
     /// Color index within the active palette bank.
@@ -943,6 +995,14 @@ async fn patch_dome_config(
     Json(patch): Json<DomeConfigPatch>,
 ) -> Json<ServerSnapshot> {
     runtime.patch_dome_config(patch).await;
+    Json(runtime.snapshot().await)
+}
+
+async fn patch_diagnostics(
+    State(runtime): State<AppRuntime>,
+    Json(patch): Json<DiagnosticConfigPatch>,
+) -> Json<ServerSnapshot> {
+    runtime.patch_diagnostics(patch).await;
     Json(runtime.snapshot().await)
 }
 
@@ -1450,6 +1510,36 @@ mod tests {
             .dome
             .iter()
             .any(|command| matches!(command, DomeCommand::Frame(_))));
+    }
+
+    #[test]
+    fn patches_support_diagnostics_for_all_outputs() {
+        let mut config = DomersConfig::default();
+        config.bar.simulation_enabled = true;
+        config.stage.simulation_enabled = true;
+        config.stage.side_lengths = vec![3, 4, 5];
+        let mut state = ServerState::new(config);
+
+        state.patch_diagnostics(super::DiagnosticConfigPatch {
+            dome_test_pattern: Some(4),
+            bar_test_pattern: Some(1),
+            stage_test_pattern: Some(1),
+        });
+        let snapshot = state.snapshot();
+        let frame = state.operator_frame();
+
+        assert_eq!(snapshot.diagnostics.dome_test_pattern, 4);
+        assert_eq!(snapshot.diagnostics.bar_test_pattern, 1);
+        assert_eq!(snapshot.diagnostics.stage_test_pattern, 1);
+        assert!(frame
+            .active_visualizers
+            .contains(&"LEDDomeFullColorFlashDiagnosticVisualizer"));
+        assert!(frame
+            .active_visualizers
+            .contains(&"LEDBarFlashColorsDiagnosticVisualizer"));
+        assert!(frame
+            .active_visualizers
+            .contains(&"LEDStageFlashColorsDiagnosticVisualizer"));
     }
 
     #[test]
