@@ -1,41 +1,42 @@
 # Porting Inventory
 
-This document tracks live, support, and dead Spectrum behavior for the Rust rewrite.
+This document tracks used Spectrum visualizer behavior for the Rust rewrite.
 When `dome-rs` intentionally replaces Spectrum behavior rather than porting it,
 record the decision in [`intentional-deviations.md`](intentional-deviations.md).
 
 ## Live Visualizers
 
+Spectrum registers 19 visualizer classes in `Spectrum/Operator.cs`. `dome-rs` ports the 17 used entries: selectable dome modes, overlay/fallback modes, diagnostics, and stage/bar modes. It does not carry the dead MIDI test visualizer or standalone Stage Tracer visualizer.
+
+Selectable dome modes:
+
 - `LEDDomeVolumeVisualizer`: default dome mode, audio input, per-pixel output.
-- `LEDDomeQuaternionPaintbrushVisualizer`: orientation paintbrush mode, buffer output.
-- `LEDDomeFlashVisualizer`: MIDI flash overlay via priority-2 tie.
 - `LEDDomeRadialVisualizer`: radial audio mode, buffer output.
 - `LEDDomeRaceVisualizer`: audio race mode; constructor accepts MIDI but the implementation does not use it.
 - `LEDDomeSnakesVisualizer`: audio snakes mode and triangle graph helpers.
-- `LEDDomeSplatVisualizer`: audio splat mode, buffer output.
 - `LEDDomeQuaternionTestVisualizer`: selectable orientation test mode.
 - `LEDDomeQuaternionMultiTestVisualizer`: selectable orientation test mode.
+- `LEDDomeQuaternionPaintbrushVisualizer`: orientation paintbrush mode, buffer output.
+- `LEDDomeSplatVisualizer`: audio splat mode, buffer output.
+
+Other live modes:
+
+- `LEDDomeFlashVisualizer`: MIDI flash overlay via priority-2 tie.
 - `LEDDomeTVStaticVisualizer`: priority-1 dome fallback.
 - `LEDStageDepthLevelVisualizer`: live stage mode, using `TracerLEDIndex` helper.
 
 ## Support
 
-- Dome diagnostic patterns: flash colors, strut iteration, strand test, full-color flash.
-- Bar and stage diagnostic flash patterns.
+- `LEDDomeStrutIterationDiagnosticVisualizer`: dome diagnostic pattern.
+- `LEDDomeFlashColorsDiagnosticVisualizer`: dome diagnostic pattern.
+- `LEDDomeStrandTestDiagnosticVisualizer`: dome diagnostic pattern.
+- `LEDDomeFullColorFlashDiagnosticVisualizer`: dome diagnostic pattern.
+- `LEDBarFlashColorsDiagnosticVisualizer`: bar diagnostic pattern.
+- `LEDStageFlashColorsDiagnosticVisualizer`: stage diagnostic pattern.
 - Dome/bar/stage command protocols from `LEDCommand.cs`.
 - Dome physical mapping and projection data.
 - `SimulatorUtils.GetComputerColor` display compensation.
 - `LEDStageTracerVisualizer.TracerLEDIndex` helper only.
-
-## Dead Or V1 Cut
-
-- `LEDDomeMidiTestVisualizer`: priority `0`, never selected.
-- Standalone `LEDStageTracerVisualizer`: superseded by Stage Depth priority.
-- Hue and LED-board XML remnants.
-- `domeAutoFlashDelay` unless explicitly redesigned.
-- Level-driver runtime behavior until a visualizer consumes it.
-- Ableton Link/Carabiner runtime sync until beat sync is designed.
-- Standalone bar OPC path; production routes bar through dome control box 5.
 
 ## Scheduler Rules
 
@@ -50,7 +51,7 @@ record the decision in [`intentional-deviations.md`](intentional-deviations.md).
 ```text
 Name:
 Source file:
-Classification: live | support | dead
+Classification: live | support
 Inputs:
 Outputs:
 Config fields:

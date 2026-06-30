@@ -10,8 +10,6 @@ pub enum Classification {
     Live,
     /// Port as diagnostic, fixture, or helper.
     Support,
-    /// Do not port unless intentionally redesigned.
-    Dead,
 }
 
 /// A visualizer inventory row.
@@ -26,11 +24,23 @@ pub struct VisualizerInventory {
 /// Initial reviewed visualizer inventory.
 pub const INVENTORY: &[VisualizerInventory] = &[
     VisualizerInventory {
-        name: "LEDDomeVolumeVisualizer",
-        classification: Classification::Live,
+        name: "LEDDomeStrutIterationDiagnosticVisualizer",
+        classification: Classification::Support,
     },
     VisualizerInventory {
-        name: "LEDDomeFlashVisualizer",
+        name: "LEDDomeFlashColorsDiagnosticVisualizer",
+        classification: Classification::Support,
+    },
+    VisualizerInventory {
+        name: "LEDDomeStrandTestDiagnosticVisualizer",
+        classification: Classification::Support,
+    },
+    VisualizerInventory {
+        name: "LEDDomeFullColorFlashDiagnosticVisualizer",
+        classification: Classification::Support,
+    },
+    VisualizerInventory {
+        name: "LEDDomeVolumeVisualizer",
         classification: Classification::Live,
     },
     VisualizerInventory {
@@ -50,16 +60,36 @@ pub const INVENTORY: &[VisualizerInventory] = &[
         classification: Classification::Live,
     },
     VisualizerInventory {
-        name: "LEDStageDepthLevelVisualizer",
+        name: "LEDDomeQuaternionTestVisualizer",
         classification: Classification::Live,
     },
     VisualizerInventory {
-        name: "LEDDomeMidiTestVisualizer",
-        classification: Classification::Dead,
+        name: "LEDDomeQuaternionMultiTestVisualizer",
+        classification: Classification::Live,
     },
     VisualizerInventory {
-        name: "LEDStageTracerVisualizer",
-        classification: Classification::Dead,
+        name: "LEDDomeQuaternionPaintbrushVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDDomeTVStaticVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDDomeFlashVisualizer",
+        classification: Classification::Live,
+    },
+    VisualizerInventory {
+        name: "LEDBarFlashColorsDiagnosticVisualizer",
+        classification: Classification::Support,
+    },
+    VisualizerInventory {
+        name: "LEDStageFlashColorsDiagnosticVisualizer",
+        classification: Classification::Support,
+    },
+    VisualizerInventory {
+        name: "LEDStageDepthLevelVisualizer",
+        classification: Classification::Live,
     },
 ];
 
@@ -293,15 +323,22 @@ mod tests {
     };
 
     #[test]
-    fn records_confirmed_dead_visualizers() {
-        assert!(INVENTORY
-            .iter()
-            .any(|v| v.name == "LEDDomeMidiTestVisualizer"
-                && v.classification == Classification::Dead));
-        assert!(INVENTORY
-            .iter()
-            .any(|v| v.name == "LEDStageTracerVisualizer"
-                && v.classification == Classification::Dead));
+    fn inventory_tracks_used_spectrum_visualizers() {
+        assert_eq!(INVENTORY.len(), 17);
+        assert_eq!(
+            INVENTORY
+                .iter()
+                .filter(|visualizer| visualizer.classification == Classification::Live)
+                .count(),
+            11
+        );
+        assert_eq!(
+            INVENTORY
+                .iter()
+                .filter(|visualizer| visualizer.classification == Classification::Support)
+                .count(),
+            6
+        );
     }
 
     #[test]
