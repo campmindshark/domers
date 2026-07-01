@@ -75,7 +75,7 @@ brightness = 0.834591194968554
 test_pattern = 0
 
 [tempo]
-source = "madmom"
+source = "human"
 flash_speed = 0.0
 
 [inputs.audio]
@@ -404,7 +404,7 @@ command = "DBNBeatTracker"
 command = "carabiner"
 args = ["--stdout-tempo"]
 human_link_output = false
-madmom_link_output = true
+madmom_link_output = false
 
 [level_drivers.presets."10% bass"]
 source = "audio"
