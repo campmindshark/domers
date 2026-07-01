@@ -1,6 +1,6 @@
-//! Ableton Link / Carabiner-compatible sidecar parsing.
+//! DJ Link / Carabiner-compatible sidecar parsing.
 
-/// Parsed Link tempo event.
+/// Parsed DJ Link tempo event.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LinkTempoEvent {
     /// Tempo in beats per minute.
@@ -9,7 +9,7 @@ pub struct LinkTempoEvent {
     pub phase: Option<f64>,
 }
 
-/// Parse one Link/Carabiner sidecar stdout line.
+/// Parse one DJ Link/Carabiner sidecar stdout line.
 ///
 /// Accepted examples:
 ///
