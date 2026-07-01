@@ -29,7 +29,7 @@ node ui/check.mjs
 - Shared-entry palette TOML serialization, parsing, and XML import golden output.
 - Visualizer simulator-frame harness, local frame-hash snapshots for live dome modes, captured headless Spectrum C# visualizer goldens, and manifest coverage that rejects missing visualizer hashes.
 - Server state contract for full config reload/apply, runtime config patching, palette patching, start/stop, metrics, input status, hardware status, and simulator frames.
-- HTTP adapter smoke coverage for the browser shell, simulator page, start/stop, tap tempo, dome config patching, palette patching, and sandbox simulator frames.
+- HTTP adapter smoke coverage for the browser shell, simulator page, start/stop, tap tempo, duplicate tap filtering, dome config patching, palette patching, and sandbox simulator frames.
 - UI smoke markers for API/WebSocket wiring, pixel rendering, full palette controls, structured config controls, input status controls, and simulator controls.
 - OPC loopback write and reconnect tests.
 

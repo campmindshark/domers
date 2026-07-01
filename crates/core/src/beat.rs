@@ -46,6 +46,7 @@ pub struct BeatBroadcaster {
 }
 
 impl BeatBroadcaster {
+    const MIN_TAP_INTERVAL_MS: u64 = 100;
     const TAP_TIMEOUT_MS: u64 = 2_000;
     const TAP_WINDOW: usize = 4;
     const MADMOM_TIMEOUT_MS: u64 = 2_500;
@@ -54,11 +55,17 @@ impl BeatBroadcaster {
     const OUTLIER_DENOMINATOR: u64 = 2;
 
     /// Add a human tap timestamp.
-    pub fn add_tap(&mut self, timestamp_ms: u64) {
+    ///
+    /// Returns `true` when the tap was accepted into the timing window. Very
+    /// short intervals are ignored as duplicate touch/click delivery rather
+    /// than interpreted as impossibly high BPM.
+    pub fn add_tap(&mut self, timestamp_ms: u64) -> bool {
         if let Some(last) = self.taps.last().copied() {
             let interval = timestamp_ms.saturating_sub(last);
-            if timestamp_ms <= last
-                || interval > Self::TAP_TIMEOUT_MS
+            if timestamp_ms <= last || interval < Self::MIN_TAP_INTERVAL_MS {
+                return false;
+            }
+            if interval > Self::TAP_TIMEOUT_MS
                 || (self.taps.len() >= 3 && self.interval_is_outlier(interval))
             {
                 self.taps.clear();
@@ -74,6 +81,7 @@ impl BeatBroadcaster {
             self.clock = Some(BeatClock::new(average, timestamp_ms));
             self.madmom_beats.clear();
         }
+        true
     }
 
     /// Reset beat/tap/Madmom state.
@@ -238,9 +246,9 @@ mod tests {
     #[test]
     fn tap_tempo_sets_average_beat_length() {
         let mut beat = BeatBroadcaster::default();
-        beat.add_tap(1_000);
-        beat.add_tap(1_500);
-        beat.add_tap(2_000);
+        assert!(beat.add_tap(1_000));
+        assert!(beat.add_tap(1_500));
+        assert!(beat.add_tap(2_000));
 
         assert_eq!(beat.beat_ms(), Some(500));
         assert_eq!(beat.bpm_string(), "120");
@@ -253,11 +261,11 @@ mod tests {
     #[test]
     fn tap_tempo_uses_short_rolling_window() {
         let mut beat = BeatBroadcaster::default();
-        beat.add_tap(0);
-        beat.add_tap(500);
-        beat.add_tap(1_000);
-        beat.add_tap(1_500);
-        beat.add_tap(2_100);
+        assert!(beat.add_tap(0));
+        assert!(beat.add_tap(500));
+        assert!(beat.add_tap(1_000));
+        assert!(beat.add_tap(1_500));
+        assert!(beat.add_tap(2_100));
 
         assert_eq!(beat.beat_ms(), Some(533));
     }
@@ -265,38 +273,50 @@ mod tests {
     #[test]
     fn tap_tempo_outlier_starts_fresh_window() {
         let mut beat = BeatBroadcaster::default();
-        beat.add_tap(0);
-        beat.add_tap(500);
-        beat.add_tap(1_000);
+        assert!(beat.add_tap(0));
+        assert!(beat.add_tap(500));
+        assert!(beat.add_tap(1_000));
         assert_eq!(beat.beat_ms(), Some(500));
 
-        beat.add_tap(2_000);
+        assert!(beat.add_tap(2_000));
         assert_eq!(beat.beat_ms(), Some(500));
         assert_eq!(beat.tap_counter_text(2_000), "1");
 
-        beat.add_tap(3_000);
+        assert!(beat.add_tap(3_000));
         assert_eq!(beat.beat_ms(), Some(500));
-        beat.add_tap(4_000);
+        assert!(beat.add_tap(4_000));
         assert_eq!(beat.beat_ms(), Some(1_000));
     }
 
     #[test]
-    fn tap_tempo_zero_interval_resets_window() {
+    fn tap_tempo_duplicate_timestamp_is_ignored() {
         let mut beat = BeatBroadcaster::default();
-        beat.add_tap(1_000);
-        beat.add_tap(1_000);
-        beat.add_tap(1_500);
-        beat.add_tap(2_000);
+        assert!(beat.add_tap(1_000));
+        assert!(!beat.add_tap(1_000));
+        assert!(beat.add_tap(1_500));
+        assert!(beat.add_tap(2_000));
 
         assert_eq!(beat.beat_ms(), Some(500));
+    }
+
+    #[test]
+    fn tap_tempo_ignores_touch_click_duplicates() {
+        let mut beat = BeatBroadcaster::default();
+        assert!(beat.add_tap(1_000));
+        assert!(!beat.add_tap(1_035));
+        assert!(beat.add_tap(1_500));
+        assert!(beat.add_tap(2_000));
+
+        assert_eq!(beat.beat_ms(), Some(500));
+        assert_eq!(beat.bpm_string(), "120");
     }
 
     #[test]
     fn reset_clears_tempo_state() {
         let mut beat = BeatBroadcaster::default();
-        beat.add_tap(1_000);
-        beat.add_tap(1_500);
-        beat.add_tap(2_000);
+        assert!(beat.add_tap(1_000));
+        assert!(beat.add_tap(1_500));
+        assert!(beat.add_tap(2_000));
         assert_eq!(beat.bpm_string(), "120");
 
         beat.reset();
@@ -309,9 +329,9 @@ mod tests {
     #[test]
     fn madmom_beats_replace_tap_window_with_realtime_anchor() {
         let mut beat = BeatBroadcaster::default();
-        beat.add_tap(1_000);
-        beat.add_tap(1_500);
-        beat.add_tap(2_000);
+        assert!(beat.add_tap(1_000));
+        assert!(beat.add_tap(1_500));
+        assert!(beat.add_tap(2_000));
 
         beat.report_madmom_beat(10_000, 5_000);
         beat.report_madmom_beat(10_400, 5_400);

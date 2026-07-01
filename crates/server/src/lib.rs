@@ -604,8 +604,9 @@ impl ServerState {
     /// This keeps runtime taps on wall-clock time while preserving deterministic
     /// tests and fixture inputs that need explicit timestamps.
     pub fn tap_tempo_at(&mut self, timestamp_ms: u64) {
-        self.inputs.taps = self.inputs.taps.saturating_add(1);
-        self.inputs.beat.add_tap(timestamp_ms);
+        if self.inputs.beat.add_tap(timestamp_ms) {
+            self.inputs.taps = self.inputs.taps.saturating_add(1);
+        }
     }
 
     /// Reset tempo state.
@@ -3034,6 +3035,21 @@ mod tests {
     }
 
     #[test]
+    fn tap_tempo_ignores_duplicate_touch_taps() {
+        let mut state = ServerState::default();
+
+        state.tap_tempo_at(1_000);
+        state.tap_tempo_at(1_030);
+        state.tap_tempo_at(1_500);
+        state.tap_tempo_at(2_000);
+
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.inputs.taps, 3);
+        assert_eq!(snapshot.inputs.beat_ms, Some(500));
+        assert_eq!(snapshot.inputs.bpm, "120");
+    }
+
+    #[test]
     fn preview_frames_do_not_advance_engine_time_or_beat_phase() {
         let mut state = ServerState::default();
         state.tap_tempo_at(0);
@@ -3219,15 +3235,15 @@ mod tests {
             },
         ]);
         assert!(state.apply_orientation_datagram(&[1; 15]));
-        state.tap_tempo();
+        state.tap_tempo_at(0);
         for _ in 0..200 {
             state.engine_frame();
         }
-        state.tap_tempo();
+        state.tap_tempo_at(400);
         for _ in 0..200 {
             state.engine_frame();
         }
-        state.tap_tempo();
+        state.tap_tempo_at(800);
         assert!(state.report_madmom_line("BEAT:10.000"));
         assert!(state.report_madmom_line("BEAT:10.400"));
 
