@@ -11,8 +11,8 @@ const stageTestPattern = document.querySelector('#stage-test-pattern');
 const configEditor = document.querySelector('#config-editor');
 const configStatus = document.querySelector('#config-status');
 const configAudioBind = document.querySelector('#config-audio-bind');
-const configAudioNativeEnabled = document.querySelector('#config-audio-native-enabled');
-const configAudioDeviceId = document.querySelector('#config-audio-device-id');
+const configAudioSource = document.querySelector('#config-audio-source');
+const configAudioDeviceHint = document.querySelector('#config-audio-device-hint');
 const configMidiBind = document.querySelector('#config-midi-bind');
 const configMidiNativeEnabled = document.querySelector('#config-midi-native-enabled');
 const configMidiDeviceId = document.querySelector('#config-midi-device-id');
@@ -102,6 +102,7 @@ let pendingSimulatorFrames = [];
 let simulatorPaintQueued = false;
 let simulatorStarted = false;
 let simulatorSocket;
+let hostAudioDevices = null;
 
 renderPaletteEditor();
 
@@ -131,9 +132,21 @@ async function loadFullConfig() {
   }
   const config = await request('/api/config');
   configEditor.value = JSON.stringify(config, null, 2);
+  await fetchAudioDevices();
   updateStructuredConfigFields(config);
   if (configStatus) {
     configStatus.textContent = 'loaded';
+  }
+}
+
+async function fetchAudioDevices() {
+  if (!configAudioSource) {
+    return;
+  }
+  try {
+    hostAudioDevices = await request('/api/audio/devices');
+  } catch (error) {
+    hostAudioDevices = null;
   }
 }
 
@@ -141,11 +154,8 @@ function updateStructuredConfigFields(config) {
   if (configAudioBind) {
     configAudioBind.value = config.inputs?.audio?.bind ?? '';
   }
-  if (configAudioNativeEnabled) {
-    configAudioNativeEnabled.checked = Boolean(config.inputs?.audio?.native_enabled);
-  }
-  if (configAudioDeviceId) {
-    renderAudioDeviceOptions(config.inputs?.audio ?? {});
+  if (configAudioSource) {
+    renderAudioSourceOptions(config.inputs?.audio ?? {});
   }
   if (configMidiBind) {
     configMidiBind.value = config.inputs?.midi?.bind ?? '';
@@ -241,33 +251,80 @@ function writeOptionalString(target, key, value) {
   }
 }
 
-function renderAudioDeviceOptions(audioConfig) {
-  if (!configAudioDeviceId) {
+function renderAudioSourceOptions(audioConfig) {
+  if (!configAudioSource) {
     return;
   }
-  const selectedId = audioConfig.device_id ?? '';
-  const devices = (audioConfig.devices ?? []).filter(device => device.flow === 'capture');
-  configAudioDeviceId.replaceChildren();
-  configAudioDeviceId.append(new Option('Bridge / default input', ''));
-  for (const device of devices) {
-    const label = audioDeviceLabel(device);
-    const option = new Option(label, device.id);
-    option.title = device.id;
-    configAudioDeviceId.append(option);
+  const nativeOn = Boolean(audioConfig.native_enabled);
+  const deviceId = audioConfig.device_id ?? '';
+  const configuredDevices = (audioConfig.devices ?? []).filter(device => device.flow === 'capture');
+  const liveDevices = hostAudioDevices?.devices ?? [];
+  configAudioSource.replaceChildren();
+  configAudioSource.append(new Option('UDP bridge feed', 'bridge'));
+  configAudioSource.append(new Option('Default input device', 'default'));
+
+  const seen = new Set();
+  const appendDevice = (id, label, title) => {
+    if (!id || seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    const option = new Option(label, id);
+    if (title) {
+      option.title = title;
+    }
+    configAudioSource.append(option);
+  };
+
+  for (const device of liveDevices) {
+    const base = device.name?.trim() || device.id;
+    const label = device.is_default ? `${base} (default)` : base;
+    appendDevice(device.id, label, device.id);
   }
-  if (selectedId && !devices.some(device => device.id === selectedId)) {
-    configAudioDeviceId.append(new Option(`Configured: ${selectedId}`, selectedId));
+  for (const device of configuredDevices) {
+    appendDevice(device.id, device.name?.trim() || friendlyDeviceId(device.id), device.id);
   }
-  configAudioDeviceId.value = selectedId;
+  if (nativeOn && deviceId && !seen.has(deviceId)) {
+    appendDevice(deviceId, `${friendlyDeviceId(deviceId)} (saved, not detected)`, deviceId);
+  }
+
+  configAudioSource.value = nativeOn ? (deviceId || 'default') : 'bridge';
+  updateAudioDeviceHint();
 }
 
-function audioDeviceLabel(device) {
-  const name = device.name?.trim() || 'Unnamed capture device';
-  const id = device.id?.trim() || '';
-  if (!id || id === name) {
-    return name;
+function updateAudioDeviceHint() {
+  if (!configAudioDeviceHint) {
+    return;
   }
-  return `${name} — ${shortDeviceId(id)}`;
+  const source = configAudioSource?.value ?? 'bridge';
+  const bind = (configAudioBind?.value ?? '').trim();
+  let message;
+  if (source === 'bridge') {
+    message = bind
+      ? `Audio comes from the UDP bridge at ${bind}.`
+      : 'Set a bridge address below to receive audio over UDP.';
+  } else if (source === 'default') {
+    message = 'Records from the system default input device.';
+  } else {
+    const label = configAudioSource?.selectedOptions?.[0]?.textContent?.trim() ?? 'the selected device';
+    message = `Records from ${label}.`;
+  }
+  configAudioDeviceHint.textContent = message;
+}
+
+function friendlyDeviceId(id) {
+  const trimmed = id?.trim() || '';
+  if (!trimmed) {
+    return 'unknown device';
+  }
+  const configuredMatch = (hostAudioDevices?.devices ?? []).find(device => device.id === trimmed);
+  if (configuredMatch?.name) {
+    return configuredMatch.name;
+  }
+  if (trimmed.includes('}.{') || /^\{.*\}$/.test(trimmed)) {
+    return `Spectrum endpoint ${shortDeviceId(trimmed)}`;
+  }
+  return trimmed;
 }
 
 function shortDeviceId(id) {
@@ -417,8 +474,10 @@ function updateConfigFromStructuredFields() {
   config.bar ??= {};
   config.stage ??= {};
   writeOptionalString(config.inputs.audio, 'bind', configAudioBind?.value ?? '');
-  config.inputs.audio.native_enabled = Boolean(configAudioNativeEnabled?.checked);
-  writeOptionalString(config.inputs.audio, 'device_id', configAudioDeviceId?.value ?? '');
+  const audioSource = configAudioSource?.value ?? 'bridge';
+  config.inputs.audio.native_enabled = audioSource !== 'bridge';
+  const audioDeviceId = audioSource === 'bridge' || audioSource === 'default' ? '' : audioSource;
+  writeOptionalString(config.inputs.audio, 'device_id', audioDeviceId);
   writeOptionalString(config.inputs.midi, 'bind', configMidiBind?.value ?? '');
   config.inputs.midi.native_enabled = Boolean(configMidiNativeEnabled?.checked);
   writeOptionalString(config.inputs.midi, 'device_id', configMidiDeviceId?.value ?? '');
@@ -761,6 +820,17 @@ function clearCanvas() {
 
 function resetDomeFrameColors() {
   domeFrameColors = [];
+}
+
+let lastRenderedVisualizer = null;
+// Sparse visualizers (Snakes, Race, Volume, TV Static) only patch some LEDs, so
+// switching visualizers must clear the persistent buffer to avoid ghosting the
+// previous visualizer's pixels.
+function noteActiveVisualizer(visualizer) {
+  if (visualizer !== lastRenderedVisualizer) {
+    lastRenderedVisualizer = visualizer;
+    resetDomeFrameColors();
+  }
 }
 
 function clearSupportCanvas(canvasElement, canvasContext) {
@@ -1139,6 +1209,7 @@ async function patchRuntimeControls() {
     }),
   });
   updateSnapshot(snapshot);
+  noteActiveVisualizer(Number(activeVisualizer.value));
   await refreshPreviewFrame();
 }
 
@@ -1187,6 +1258,7 @@ async function refreshSandboxFrame() {
     return;
   }
   updateSandboxControlLabels();
+  noteActiveVisualizer(Number(sandboxActiveVisualizer?.value ?? 0));
   scheduleSimulatorFrame(await request('/api/simulator/sandbox-frame', {
     method: 'POST',
     body: JSON.stringify({
@@ -1316,6 +1388,9 @@ document.querySelector('#reload-config')?.addEventListener('click', loadFullConf
 bindBrightnessControls(configDomeBrightnessSlider, configDomeBrightness);
 bindBrightnessControls(configBarBrightnessSlider, configBarBrightness);
 bindBrightnessControls(configStageBrightnessSlider, configStageBrightness);
+
+configAudioSource?.addEventListener('change', updateAudioDeviceHint);
+configAudioBind?.addEventListener('input', updateAudioDeviceHint);
 
 document.querySelector('#apply-config')?.addEventListener('click', async () => {
   await applyFullConfig();

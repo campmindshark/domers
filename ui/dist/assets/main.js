@@ -24514,20 +24514,28 @@ async function loadFullConfig() {
   }
   const config = await request("/api/config");
   configEditor.value = JSON.stringify(config, null, 2);
+  await fetchAudioDevices();
   updateStructuredConfigFields(config);
   if (configStatus) {
     configStatus.textContent = "loaded";
+  }
+}
+async function fetchAudioDevices() {
+  if (!configAudioSource) {
+    return;
+  }
+  try {
+    hostAudioDevices = await request("/api/audio/devices");
+  } catch (error) {
+    hostAudioDevices = null;
   }
 }
 function updateStructuredConfigFields(config) {
   if (configAudioBind) {
     configAudioBind.value = config.inputs?.audio?.bind ?? "";
   }
-  if (configAudioNativeEnabled) {
-    configAudioNativeEnabled.checked = Boolean(config.inputs?.audio?.native_enabled);
-  }
-  if (configAudioDeviceId) {
-    renderAudioDeviceOptions(config.inputs?.audio ?? {});
+  if (configAudioSource) {
+    renderAudioSourceOptions(config.inputs?.audio ?? {});
   }
   if (configMidiBind) {
     configMidiBind.value = config.inputs?.midi?.bind ?? "";
@@ -24618,32 +24626,73 @@ function writeOptionalString(target, key, value) {
     delete target[key];
   }
 }
-function renderAudioDeviceOptions(audioConfig) {
-  if (!configAudioDeviceId) {
+function renderAudioSourceOptions(audioConfig) {
+  if (!configAudioSource) {
     return;
   }
-  const selectedId = audioConfig.device_id ?? "";
-  const devices = (audioConfig.devices ?? []).filter((device) => device.flow === "capture");
-  configAudioDeviceId.replaceChildren();
-  configAudioDeviceId.append(new Option("Bridge / default input", ""));
-  for (const device of devices) {
-    const label = audioDeviceLabel(device);
-    const option = new Option(label, device.id);
-    option.title = device.id;
-    configAudioDeviceId.append(option);
+  const nativeOn = Boolean(audioConfig.native_enabled);
+  const deviceId = audioConfig.device_id ?? "";
+  const configuredDevices = (audioConfig.devices ?? []).filter((device) => device.flow === "capture");
+  const liveDevices = hostAudioDevices?.devices ?? [];
+  configAudioSource.replaceChildren();
+  configAudioSource.append(new Option("UDP bridge feed", "bridge"));
+  configAudioSource.append(new Option("Default input device", "default"));
+  const seen = /* @__PURE__ */ new Set();
+  const appendDevice = (id, label, title) => {
+    if (!id || seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    const option = new Option(label, id);
+    if (title) {
+      option.title = title;
+    }
+    configAudioSource.append(option);
+  };
+  for (const device of liveDevices) {
+    const base = device.name?.trim() || device.id;
+    const label = device.is_default ? `${base} (default)` : base;
+    appendDevice(device.id, label, device.id);
   }
-  if (selectedId && !devices.some((device) => device.id === selectedId)) {
-    configAudioDeviceId.append(new Option(`Configured: ${selectedId}`, selectedId));
+  for (const device of configuredDevices) {
+    appendDevice(device.id, device.name?.trim() || friendlyDeviceId(device.id), device.id);
   }
-  configAudioDeviceId.value = selectedId;
+  if (nativeOn && deviceId && !seen.has(deviceId)) {
+    appendDevice(deviceId, `${friendlyDeviceId(deviceId)} (saved, not detected)`, deviceId);
+  }
+  configAudioSource.value = nativeOn ? deviceId || "default" : "bridge";
+  updateAudioDeviceHint();
 }
-function audioDeviceLabel(device) {
-  const name = device.name?.trim() || "Unnamed capture device";
-  const id = device.id?.trim() || "";
-  if (!id || id === name) {
-    return name;
+function updateAudioDeviceHint() {
+  if (!configAudioDeviceHint) {
+    return;
   }
-  return `${name} \u2014 ${shortDeviceId(id)}`;
+  const source = configAudioSource?.value ?? "bridge";
+  const bind = (configAudioBind?.value ?? "").trim();
+  let message;
+  if (source === "bridge") {
+    message = bind ? `Audio comes from the UDP bridge at ${bind}.` : "Set a bridge address below to receive audio over UDP.";
+  } else if (source === "default") {
+    message = "Records from the system default input device.";
+  } else {
+    const label = configAudioSource?.selectedOptions?.[0]?.textContent?.trim() ?? "the selected device";
+    message = `Records from ${label}.`;
+  }
+  configAudioDeviceHint.textContent = message;
+}
+function friendlyDeviceId(id) {
+  const trimmed = id?.trim() || "";
+  if (!trimmed) {
+    return "unknown device";
+  }
+  const configuredMatch = (hostAudioDevices?.devices ?? []).find((device) => device.id === trimmed);
+  if (configuredMatch?.name) {
+    return configuredMatch.name;
+  }
+  if (trimmed.includes("}.{") || /^\{.*\}$/.test(trimmed)) {
+    return `Spectrum endpoint ${shortDeviceId(trimmed)}`;
+  }
+  return trimmed;
 }
 function shortDeviceId(id) {
   const withoutBraces = id.replace(/[{}]/g, "");
@@ -24780,8 +24829,10 @@ function updateConfigFromStructuredFields() {
   config.bar ??= {};
   config.stage ??= {};
   writeOptionalString(config.inputs.audio, "bind", configAudioBind?.value ?? "");
-  config.inputs.audio.native_enabled = Boolean(configAudioNativeEnabled?.checked);
-  writeOptionalString(config.inputs.audio, "device_id", configAudioDeviceId?.value ?? "");
+  const audioSource = configAudioSource?.value ?? "bridge";
+  config.inputs.audio.native_enabled = audioSource !== "bridge";
+  const audioDeviceId = audioSource === "bridge" || audioSource === "default" ? "" : audioSource;
+  writeOptionalString(config.inputs.audio, "device_id", audioDeviceId);
   writeOptionalString(config.inputs.midi, "bind", configMidiBind?.value ?? "");
   config.inputs.midi.native_enabled = Boolean(configMidiNativeEnabled?.checked);
   writeOptionalString(config.inputs.midi, "device_id", configMidiDeviceId?.value ?? "");
@@ -25096,6 +25147,12 @@ function clearCanvas() {
 }
 function resetDomeFrameColors() {
   domeFrameColors = [];
+}
+function noteActiveVisualizer(visualizer) {
+  if (visualizer !== lastRenderedVisualizer) {
+    lastRenderedVisualizer = visualizer;
+    resetDomeFrameColors();
+  }
 }
 function clearSupportCanvas(canvasElement, canvasContext) {
   if (!canvasElement || !canvasContext) {
@@ -25433,6 +25490,7 @@ async function patchRuntimeControls() {
     })
   });
   updateSnapshot(snapshot);
+  noteActiveVisualizer(Number(activeVisualizer.value));
   await refreshPreviewFrame();
 }
 async function patchDiagnosticControls() {
@@ -25477,6 +25535,7 @@ async function refreshSandboxFrame() {
     return;
   }
   updateSandboxControlLabels();
+  noteActiveVisualizer(Number(sandboxActiveVisualizer?.value ?? 0));
   scheduleSimulatorFrame(await request("/api/simulator/sandbox-frame", {
     method: "POST",
     body: JSON.stringify({
@@ -25583,7 +25642,7 @@ function connectSimulatorStream() {
     }
   });
 }
-var status, streamStatus, hardwareDome, hardwareStage, activeVisualizer, flashSpeed, flashSpeedValue, domeTestPattern, barTestPattern, stageTestPattern, configEditor, configStatus, configAudioBind, configAudioNativeEnabled, configAudioDeviceId, configMidiBind, configMidiNativeEnabled, configMidiDeviceId, configOrientationBind, configTempoSource, configMadmomCommand, configMadmomTracker, configMadmomAudioIndex, configCarabinerCommand, configCarabinerArgs, configMidiBindings, configDomeEnabled, configDomeSimulationEnabled, configDomeOpcAddress, configDomeBrightnessSlider, configDomeBrightness, configBarEnabled, configBarSimulationEnabled, configBarInfinityLength, configBarInfinityWidth, configBarRunnerLength, configBarBrightnessSlider, configBarBrightness, configStageEnabled, configStageSimulationEnabled, configStageOpcAddress, configStageBrightnessSlider, configStageBrightness, configStageSideLengths, configStageSideLengthsSummary, configStageSideLengthsGrid, simVolume, simVolumeValue, simBeatProgress, simBeatProgressValue, simFlashActive, paletteIndex, paletteGrid, paletteControls, inputAudio, inputMidi, inputMidiLevels, inputOrientation, inputMadmom, inputLink, orientationDevices, midiLog, manualBpm, tempoBpm, tapCounter, sandboxActiveVisualizer, sandboxVolume, sandboxVolumeValue, sandboxBeatProgress, sandboxBeatProgressValue, sandboxFlashActive, sandboxOrientationEnabled, sandboxOrientationYaw, sandboxOrientationYawValue, sandboxOrientationPitch, sandboxOrientationPitchValue, sandboxOrientationRoll, sandboxOrientationRollValue, sandboxPalettePrimary, sandboxPaletteSecondary, sandboxPaletteAccent, metricFrames, metricSimulatorFrames, tabButtons, tabPanels, canvas, context, barSimulator, barContext, stageSimulator, stageContext, isDedicatedSimulatorPage, SPECTRUM_CANVAS_SIZE, SPECTRUM_PROJECTION_OFFSET, SPECTRUM_PROJECTION_SPAN, domeLayout, domeLedPoints, domeLedStrutOffsets, domeFrameColors, latestSimulatorFrame, pendingSimulatorFrames, simulatorPaintQueued, simulatorStarted, simulatorSocket;
+var status, streamStatus, hardwareDome, hardwareStage, activeVisualizer, flashSpeed, flashSpeedValue, domeTestPattern, barTestPattern, stageTestPattern, configEditor, configStatus, configAudioBind, configAudioSource, configAudioDeviceHint, configMidiBind, configMidiNativeEnabled, configMidiDeviceId, configOrientationBind, configTempoSource, configMadmomCommand, configMadmomTracker, configMadmomAudioIndex, configCarabinerCommand, configCarabinerArgs, configMidiBindings, configDomeEnabled, configDomeSimulationEnabled, configDomeOpcAddress, configDomeBrightnessSlider, configDomeBrightness, configBarEnabled, configBarSimulationEnabled, configBarInfinityLength, configBarInfinityWidth, configBarRunnerLength, configBarBrightnessSlider, configBarBrightness, configStageEnabled, configStageSimulationEnabled, configStageOpcAddress, configStageBrightnessSlider, configStageBrightness, configStageSideLengths, configStageSideLengthsSummary, configStageSideLengthsGrid, simVolume, simVolumeValue, simBeatProgress, simBeatProgressValue, simFlashActive, paletteIndex, paletteGrid, paletteControls, inputAudio, inputMidi, inputMidiLevels, inputOrientation, inputMadmom, inputLink, orientationDevices, midiLog, manualBpm, tempoBpm, tapCounter, sandboxActiveVisualizer, sandboxVolume, sandboxVolumeValue, sandboxBeatProgress, sandboxBeatProgressValue, sandboxFlashActive, sandboxOrientationEnabled, sandboxOrientationYaw, sandboxOrientationYawValue, sandboxOrientationPitch, sandboxOrientationPitchValue, sandboxOrientationRoll, sandboxOrientationRollValue, sandboxPalettePrimary, sandboxPaletteSecondary, sandboxPaletteAccent, metricFrames, metricSimulatorFrames, tabButtons, tabPanels, canvas, context, barSimulator, barContext, stageSimulator, stageContext, isDedicatedSimulatorPage, SPECTRUM_CANVAS_SIZE, SPECTRUM_PROJECTION_OFFSET, SPECTRUM_PROJECTION_SPAN, domeLayout, domeLedPoints, domeLedStrutOffsets, domeFrameColors, latestSimulatorFrame, pendingSimulatorFrames, simulatorPaintQueued, simulatorStarted, simulatorSocket, hostAudioDevices, lastRenderedVisualizer;
 var init_main = __esm({
   async "main.mjs"() {
     "use strict";
@@ -25600,8 +25659,8 @@ var init_main = __esm({
     configEditor = document.querySelector("#config-editor");
     configStatus = document.querySelector("#config-status");
     configAudioBind = document.querySelector("#config-audio-bind");
-    configAudioNativeEnabled = document.querySelector("#config-audio-native-enabled");
-    configAudioDeviceId = document.querySelector("#config-audio-device-id");
+    configAudioSource = document.querySelector("#config-audio-source");
+    configAudioDeviceHint = document.querySelector("#config-audio-device-hint");
     configMidiBind = document.querySelector("#config-midi-bind");
     configMidiNativeEnabled = document.querySelector("#config-midi-native-enabled");
     configMidiDeviceId = document.querySelector("#config-midi-device-id");
@@ -25688,7 +25747,9 @@ var init_main = __esm({
     pendingSimulatorFrames = [];
     simulatorPaintQueued = false;
     simulatorStarted = false;
+    hostAudioDevices = null;
     renderPaletteEditor();
+    lastRenderedVisualizer = null;
     document.querySelector("#start-engine")?.addEventListener("click", async () => {
       updateSnapshot(await request("/api/start", { method: "POST" }));
     });
@@ -25699,6 +25760,8 @@ var init_main = __esm({
     bindBrightnessControls(configDomeBrightnessSlider, configDomeBrightness);
     bindBrightnessControls(configBarBrightnessSlider, configBarBrightness);
     bindBrightnessControls(configStageBrightnessSlider, configStageBrightness);
+    configAudioSource?.addEventListener("change", updateAudioDeviceHint);
+    configAudioBind?.addEventListener("input", updateAudioDeviceHint);
     document.querySelector("#apply-config")?.addEventListener("click", async () => {
       await applyFullConfig();
       await refreshPreviewFrame();
@@ -25830,18 +25893,14 @@ function ConfigEditor() {
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "config-card", "aria-label": "Audio input config", children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "Audio" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "UDP bind" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Address used by the bridge or simulator volume source." }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-audio-bind", name: "configAudioBind", type: "text", placeholder: "127.0.0.1:9001" })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "checkbox-field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-audio-native-enabled", name: "configAudioNativeEnabled", type: "checkbox" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Native CPAL capture" })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Audio source" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { id: "config-audio-source", name: "configAudioSource" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "config-audio-device-hint", className: "field-hint" })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Audio device" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Choose a configured capture endpoint. Leave blank for bridge/default input." }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { id: "config-audio-device-id", name: "configAudioDeviceId" })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Bridge address (UDP)" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: 'Where the external bridge or simulator posts volume. Used when the source is "UDP bridge feed".' }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-audio-bind", name: "configAudioBind", type: "text", placeholder: "127.0.0.1:9001" })
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "config-card", "aria-label": "MIDI input config", children: [

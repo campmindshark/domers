@@ -21,7 +21,14 @@ import build_spectrum_csharp
 
 ROOT = Path(__file__).resolve().parents[1]
 SPECTRUM = ROOT.parent / "spectrum"
-CASES = ROOT / "fixtures" / "spectrum-csharp" / "visualizer_frame_cases.json"
+CASES = Path(
+    os.environ.get(
+        "DOMERS_VISUALIZER_CASES",
+        str(ROOT / "fixtures" / "spectrum-csharp" / "visualizer_frame_cases.json"),
+    )
+)
+if not CASES.is_absolute():
+    CASES = ROOT / CASES
 RUNNER_DIR = ROOT / "target" / "spectrum-visualizer-capture"
 RUNNER_CSPROJ = RUNNER_DIR / "SpectrumVisualizerCapture.csproj"
 RUNNER_PROGRAM = RUNNER_DIR / "Program.cs"
@@ -52,9 +59,9 @@ using Spectrum.LEDs;
 using Spectrum.MIDI;
 using XSerializer;
 
-record CaptureCase(string Case, string Name, string Classification, CaptureInput Input);
+record CaptureCase(string Case, string Name, string Classification, CaptureInput Input, List<CaptureInput> InputSequence);
 record CaptureInput(double Volume, double BeatProgress, bool FlashActive, int DiagnosticState, int DiagnosticStep, int PaletteSlot);
-record CaptureResult(string Case, string Name, string Status, string Value, string? Error);
+record CaptureResult(string Case, string Name, string Status, string Value, List<string> Frames, string? Error);
 
 class Program {
 static readonly Dictionary<string, string> typeNames = new() {
@@ -254,7 +261,20 @@ static void HashStageCommands(ref ulong hash, SpectrumConfiguration config, bool
   }
 }
 
-static string CaptureHash(SpectrumConfiguration config, CaptureCase testCase) {
+static ulong HashVisualizerOutput(SpectrumConfiguration config, object visualizer, CaptureCase testCase) {
+  ulong hash = 0xcbf29ce484222325UL;
+  var usedBuffer = HashDomeBufferIfPresent(ref hash, visualizer);
+  if (!usedBuffer) {
+    HashDomeCommands(ref hash, config);
+  } else {
+    DrainQueues(config);
+  }
+  HashBarCommands(ref hash, config);
+  HashStageCommands(ref hash, config, Environment.GetEnvironmentVariable("DOMERS_TRACE_STAGE") == testCase.Case);
+  return hash;
+}
+
+static List<string> CaptureFrameHashes(SpectrumConfiguration config, CaptureCase testCase) {
   ConfigureCase(config, testCase);
   var audio = new AudioInput(config);
   SetAudioVolume(audio, testCase.Input.Volume);
@@ -267,21 +287,21 @@ static string CaptureHash(SpectrumConfiguration config, CaptureCase testCase) {
   SeedRandomFields(visualizer);
   ((Visualizer)visualizer).Enabled = true;
   DrainQueues(config);
-  ((Visualizer)visualizer).Visualize();
-  if (!HasQueuedOutput(config) && visualizer.GetType().GetField("buffer", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(visualizer) == null) {
-    Thread.Sleep(1100);
+  var values = new List<string>();
+  foreach (var input in testCase.InputSequence) {
+    SetAudioVolume(audio, input.Volume);
     ((Visualizer)visualizer).Visualize();
+    if (!HasQueuedOutput(config) && visualizer.GetType().GetField("buffer", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(visualizer) == null) {
+      Thread.Sleep(1100);
+      ((Visualizer)visualizer).Visualize();
+    }
+    values.Add(HashVisualizerOutput(config, visualizer, testCase).ToString());
   }
-  ulong hash = 0xcbf29ce484222325UL;
-  var usedBuffer = HashDomeBufferIfPresent(ref hash, visualizer);
-  if (!usedBuffer) {
-    HashDomeCommands(ref hash, config);
-  } else {
-    DrainQueues(config);
-  }
-  HashBarCommands(ref hash, config);
-  HashStageCommands(ref hash, config, Environment.GetEnvironmentVariable("DOMERS_TRACE_STAGE") == testCase.Case);
-  return hash.ToString();
+  return values;
+}
+
+static string CaptureHash(SpectrumConfiguration config, CaptureCase testCase) {
+  return CaptureFrameHashes(config, testCase)[0];
 }
 
 static int Main(string[] args) {
@@ -291,6 +311,29 @@ static int Main(string[] args) {
   var cases = new List<CaptureCase>();
   foreach (var item in manifest.GetProperty("cases").EnumerateArray()) {
     var input = item.GetProperty("input");
+    var sequence = new List<CaptureInput>();
+    if (item.TryGetProperty("input_sequence", out var inputSequence)) {
+      foreach (var frameInput in inputSequence.EnumerateArray()) {
+        sequence.Add(new CaptureInput(
+          frameInput.GetProperty("volume").GetDouble(),
+          frameInput.GetProperty("beat_progress").GetDouble(),
+          frameInput.GetProperty("flash_active").GetBoolean(),
+          frameInput.GetProperty("diagnostic_state").GetInt32(),
+          frameInput.GetProperty("diagnostic_step").GetInt32(),
+          frameInput.GetProperty("palette_slot").GetInt32()
+        ));
+      }
+    }
+    if (sequence.Count == 0) {
+      sequence.Add(new CaptureInput(
+        input.GetProperty("volume").GetDouble(),
+        input.GetProperty("beat_progress").GetDouble(),
+        input.GetProperty("flash_active").GetBoolean(),
+        input.GetProperty("diagnostic_state").GetInt32(),
+        input.GetProperty("diagnostic_step").GetInt32(),
+        input.GetProperty("palette_slot").GetInt32()
+      ));
+    }
     cases.Add(new CaptureCase(
       item.GetProperty("case").GetString()!,
       item.GetProperty("name").GetString()!,
@@ -302,7 +345,8 @@ static int Main(string[] args) {
         input.GetProperty("diagnostic_state").GetInt32(),
         input.GetProperty("diagnostic_step").GetInt32(),
         input.GetProperty("palette_slot").GetInt32()
-      )
+      ),
+      sequence
     ));
   }
 
@@ -310,9 +354,10 @@ static int Main(string[] args) {
   var results = new List<CaptureResult>();
   foreach (var testCase in cases) {
     try {
-      results.Add(new CaptureResult(testCase.Case, testCase.Name, "captured", CaptureHash(config, testCase), null));
+      var frames = CaptureFrameHashes(config, testCase);
+      results.Add(new CaptureResult(testCase.Case, testCase.Name, "captured", frames[0], frames, null));
     } catch (Exception ex) {
-      results.Add(new CaptureResult(testCase.Case, testCase.Name, "failed", "", ex.GetBaseException().Message));
+      results.Add(new CaptureResult(testCase.Case, testCase.Name, "failed", "", new List<string>(), ex.GetBaseException().Message));
     }
   }
   Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { results }, new JsonSerializerOptions { WriteIndented = true }));
@@ -397,7 +442,12 @@ def update_manifest(capture: dict[str, object]) -> int:
         result = by_case[case["case"]]
         if result["Status"] == "captured":
             case["expected"]["status"] = "captured"
-            case["expected"]["value"] = result["Value"]
+            if "input_sequence" in case:
+                case["expected"]["frames"] = result["Frames"]
+                if result["Frames"]:
+                    case["expected"]["value"] = result["Frames"][0]
+            else:
+                case["expected"]["value"] = result["Value"]
             case["known_unverified"] = [
                 note
                 for note in case.get("known_unverified", [])
@@ -406,6 +456,8 @@ def update_manifest(capture: dict[str, object]) -> int:
         else:
             failures += 1
             case["expected"]["status"] = "capture_failed"
+            if "input_sequence" in case:
+                case["expected"]["frames"] = []
             case["expected"]["value"] = None
             case["known_unverified"] = [f"C# capture failed: {result['Error']}"]
     manifest["capture_tool"] = "tools/capture_spectrum_visualizer_frames.py"

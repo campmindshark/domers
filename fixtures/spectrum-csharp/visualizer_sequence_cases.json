@@ -1,0 +1,183 @@
+{
+  "capture_metadata": {
+    "command": "DOMERS_VISUALIZER_CASES=fixtures/spectrum-csharp/visualizer_sequence_cases.json python3 tools/capture_spectrum_visualizer_frames.py",
+    "description": "Stateful multi-frame Spectrum visualizer sequences. Each case must keep one Spectrum visualizer instance alive across the whole input_sequence.",
+    "hardware_required": false,
+    "runner": "target/spectrum-visualizer-capture/SpectrumVisualizerCapture.csproj",
+    "source": "spectrum/Spectrum/spectrum_default_config.xml"
+  },
+  "capture_tool": "tools/capture_spectrum_visualizer_frames.py",
+  "cases": [
+    {
+      "case": "dome_volume_motion_default",
+      "classification": "live",
+      "expected": {
+        "frames": [],
+        "kind": "frame_sequence_hashes",
+        "status": "pending_csharp_execution",
+        "value": null
+      },
+      "input": {
+        "beat_progress": 0.0,
+        "diagnostic_state": 1,
+        "diagnostic_step": 4,
+        "flash_active": true,
+        "palette_slot": 0,
+        "volume": 0.7
+      },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.24, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.25, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.5, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.75, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 }
+      ],
+      "known_unverified": [ "Pending multi-frame Spectrum capture." ],
+      "name": "LEDDomeVolumeVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeVolumeVisualizer.cs"
+    },
+    {
+      "case": "dome_radial_motion_default",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.1, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.4, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.9, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.1, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 }
+      ],
+      "known_unverified": [ "Pending multi-frame Spectrum capture." ],
+      "name": "LEDDomeRadialVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeRadialVisualizer.cs"
+    },
+    {
+      "case": "dome_race_motion_default",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.0 },
+        { "beat_progress": 0.1, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.2, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.3, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 1.0 }
+      ],
+      "known_unverified": [ "Pending multi-frame Spectrum capture with deterministic elapsed-time control." ],
+      "name": "LEDDomeRaceVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeRaceVisualizer.cs"
+    },
+    {
+      "case": "dome_snakes_motion_default",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.05, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.1, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.15, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 }
+      ],
+      "known_unverified": [ "Pending multi-frame Spectrum capture crossing 50ms throttle." ],
+      "name": "LEDDomeSnakesVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeSnakesVisualizer.cs"
+    },
+    {
+      "case": "dome_splat_motion_default",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.2, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.2, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.4, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.1, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.2, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 }
+      ],
+      "known_unverified": [ "Pending multi-frame Spectrum capture for measure-wrap blob/fade." ],
+      "name": "LEDDomeSplatVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeSplatVisualizer.cs"
+    },
+    {
+      "case": "dome_quaternion_test_no_device_stability",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.5, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 }
+      ],
+      "known_unverified": [ "Pending no-device stability capture." ],
+      "name": "LEDDomeQuaternionTestVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeQuaternionTestVisualizer.cs"
+    },
+    {
+      "case": "dome_quaternion_multi_no_device_stability",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.5, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 }
+      ],
+      "known_unverified": [ "Pending no-device stability capture." ],
+      "name": "LEDDomeQuaternionMultiTestVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeQuaternionMultiTestVisualizer.cs"
+    },
+    {
+      "case": "dome_quaternion_paintbrush_idle_motion",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.25, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.5, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.75, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 }
+      ],
+      "known_unverified": [ "Pending idle paint/ripple/twinkle sequence capture." ],
+      "name": "LEDDomeQuaternionPaintbrushVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeQuaternionPaintbrushVisualizer.cs"
+    },
+    {
+      "case": "dome_tv_static_rng_sequence",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.1, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.2, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 }
+      ],
+      "known_unverified": [ "Pending persistent Random sequence capture." ],
+      "name": "LEDDomeTVStaticVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeTVStaticVisualizer.cs"
+    },
+    {
+      "case": "dome_flash_idle_and_active_placeholder",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": false, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": false, "palette_slot": 0, "volume": 0.7 },
+        { "beat_progress": 0.25, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 }
+      ],
+      "known_unverified": [ "Pending capture with synthetic MIDI note-on/note-off support." ],
+      "name": "LEDDomeFlashVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDDomeFlashVisualizer.cs"
+    },
+    {
+      "case": "stage_depth_level_motion_default",
+      "classification": "live",
+      "expected": { "frames": [], "kind": "frame_sequence_hashes", "status": "pending_csharp_execution", "value": null },
+      "input": { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.7 },
+      "input_sequence": [
+        { "beat_progress": 0.0, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.1 },
+        { "beat_progress": 0.25, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.5 },
+        { "beat_progress": 0.5, "diagnostic_state": 1, "diagnostic_step": 4, "flash_active": true, "palette_slot": 0, "volume": 0.9 }
+      ],
+      "known_unverified": [ "Pending multi-frame stage depth capture." ],
+      "name": "LEDStageDepthLevelVisualizer",
+      "source": "spectrum/Spectrum/Visualizers/LEDStageDepthLevelVisualizer.cs"
+    }
+  ]
+}

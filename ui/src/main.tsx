@@ -42,18 +42,14 @@ function ConfigEditor() {
           <section className="config-card" aria-label="Audio input config">
             <h3>Audio</h3>
             <label className="config-field">
-              <span className="config-field-label">UDP bind</span>
-              <span className="field-hint">Address used by the bridge or simulator volume source.</span>
-              <input id="config-audio-bind" name="configAudioBind" type="text" placeholder="127.0.0.1:9001" />
-            </label>
-            <label className="checkbox-field">
-              <input id="config-audio-native-enabled" name="configAudioNativeEnabled" type="checkbox" />
-              <span>Native CPAL capture</span>
+              <span className="config-field-label">Audio source</span>
+              <select id="config-audio-source" name="configAudioSource" />
+              <span id="config-audio-device-hint" className="field-hint" />
             </label>
             <label className="config-field">
-              <span className="config-field-label">Audio device</span>
-              <span className="field-hint">Choose a configured capture endpoint. Leave blank for bridge/default input.</span>
-              <select id="config-audio-device-id" name="configAudioDeviceId" />
+              <span className="config-field-label">Bridge address (UDP)</span>
+              <span className="field-hint">Where the external bridge or simulator posts volume. Used when the source is "UDP bridge feed".</span>
+              <input id="config-audio-bind" name="configAudioBind" type="text" placeholder="127.0.0.1:9001" />
             </label>
           </section>
           <section className="config-card" aria-label="MIDI input config">

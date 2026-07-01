@@ -1241,6 +1241,7 @@ impl AppRuntime {
             )
             .route("/api/dome/geometry", get(dome_geometry))
             .route("/api/dome/mapping", get(dome_mapping))
+            .route("/api/audio/devices", get(get_audio_devices))
             .route("/api/simulator", patch(patch_simulator_controls))
             .route("/api/simulator/frame", get(simulator_preview_frame))
             .route(
@@ -2406,6 +2407,75 @@ async fn dome_mapping() -> Json<serde_json::Value> {
         ))
         .expect("dome mapping fixture is valid JSON"),
     )
+}
+
+/// One selectable host audio input device.
+#[derive(Clone, Debug, Serialize)]
+struct HostAudioDevice {
+    /// Identifier used to pin the device. Matches the CPAL device name.
+    id: String,
+    /// Friendly display name.
+    name: String,
+    /// Whether this is the OS default input device.
+    is_default: bool,
+}
+
+/// Live host audio input device listing for the config UI.
+#[derive(Clone, Debug, Serialize)]
+struct AudioDeviceListing {
+    /// Whether this build can enumerate/capture native audio.
+    native_available: bool,
+    /// Name of the OS default input device, when known.
+    default_device_name: Option<String>,
+    /// Selectable capture devices detected on this machine.
+    devices: Vec<HostAudioDevice>,
+}
+
+#[cfg(feature = "native-capture")]
+async fn get_audio_devices() -> Json<AudioDeviceListing> {
+    let listing = tokio::task::spawn_blocking(enumerate_host_audio_devices)
+        .await
+        .unwrap_or_else(|_| AudioDeviceListing {
+            native_available: true,
+            default_device_name: None,
+            devices: Vec::new(),
+        });
+    Json(listing)
+}
+
+#[cfg(feature = "native-capture")]
+fn enumerate_host_audio_devices() -> AudioDeviceListing {
+    let host = cpal::default_host();
+    let default_device_name = host
+        .default_input_device()
+        .and_then(|device| device.name().ok());
+    let devices = match host.input_devices() {
+        Ok(devices) => devices
+            .filter_map(|device| device.name().ok())
+            .map(|name| HostAudioDevice {
+                is_default: default_device_name
+                    .as_deref()
+                    .is_some_and(|default| default == name),
+                id: name.clone(),
+                name,
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+    AudioDeviceListing {
+        native_available: true,
+        default_device_name,
+        devices,
+    }
+}
+
+#[cfg(not(feature = "native-capture"))]
+async fn get_audio_devices() -> Json<AudioDeviceListing> {
+    Json(AudioDeviceListing {
+        native_available: false,
+        default_device_name: None,
+        devices: Vec::new(),
+    })
 }
 
 async fn get_state(State(runtime): State<AppRuntime>) -> Json<ServerSnapshot> {
