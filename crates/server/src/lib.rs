@@ -1504,8 +1504,7 @@ impl AppRuntime {
             measure_length_ms.map(|_| state.inputs.beat.progress(now_ms, VOLUME_ROTATION_SPEED));
         let beat_progress_gradient =
             measure_length_ms.map(|_| state.inputs.beat.progress(now_ms, VOLUME_GRADIENT_SPEED));
-        let orientation_devices =
-            orientation_device_inputs(&state.inputs.orientation.devices());
+        let orientation_devices = orientation_device_inputs(&state.inputs.orientation.devices());
         let frame = render_operator_frame(
             &config,
             simulator_controls,
@@ -1548,8 +1547,8 @@ impl AppRuntime {
                 state.engine_frame();
                 let config = state.full_config();
                 let operator_frame = state.operator_frame();
-                let visualizers_changed = operator_frame.active_visualizers
-                    != state.last_broadcast_visualizers;
+                let visualizers_changed =
+                    operator_frame.active_visualizers != state.last_broadcast_visualizers;
                 if visualizers_changed {
                     state.last_broadcast_visualizers = operator_frame
                         .active_visualizers
@@ -1562,24 +1561,23 @@ impl AppRuntime {
                     clippy::manual_is_multiple_of,
                     reason = "The is_multiple_of method is newer than the workspace MSRV"
                 )]
-                let maybe_frame = if visualizers_changed
-                    || frame_count % SIMULATOR_FRAME_STRIDE == 0
-                {
-                    state.record_simulator_frame();
-                    Some(SimulatorFrame {
-                        metrics: state.metrics(),
-                        active_visualizers: operator_frame
-                            .active_visualizers
-                            .iter()
-                            .map(|name| (*name).to_string())
-                            .collect(),
-                        commands: serialize_commands(operator_frame.dome.clone()),
-                        bar_commands: serialize_bar_commands(operator_frame.bar.clone()),
-                        stage_commands: serialize_stage_commands(operator_frame.stage.clone()),
-                    })
-                } else {
-                    None
-                };
+                let maybe_frame =
+                    if visualizers_changed || frame_count % SIMULATOR_FRAME_STRIDE == 0 {
+                        state.record_simulator_frame();
+                        Some(SimulatorFrame {
+                            metrics: state.metrics(),
+                            active_visualizers: operator_frame
+                                .active_visualizers
+                                .iter()
+                                .map(|name| (*name).to_string())
+                                .collect(),
+                            commands: serialize_commands(operator_frame.dome.clone()),
+                            bar_commands: serialize_bar_commands(operator_frame.bar.clone()),
+                            stage_commands: serialize_stage_commands(operator_frame.stage.clone()),
+                        })
+                    } else {
+                        None
+                    };
                 (config, operator_frame, maybe_frame)
             };
 
@@ -2872,10 +2870,9 @@ fn render_scheduled_visualizer(
             diagnostic_input,
         )),
         "LEDDomeStrutIterationDiagnosticVisualizer" => {
-            frame.dome.extend(runtime.render_strut_iteration(
-                now_ms,
-                brightness_f32(config.dome.brightness),
-            ));
+            frame.dome.extend(
+                runtime.render_strut_iteration(now_ms, brightness_f32(config.dome.brightness)),
+            );
         }
         "LEDDomeStrandTestDiagnosticVisualizer" => frame.dome.extend(render_dome_diagnostic(
             DomeDiagnosticVisualizer::StrandTest,
@@ -3110,9 +3107,9 @@ mod tests {
     };
 
     use domers_core::{
-        AudioDeviceConfig, AudioDeviceFlowConfig, DomersConfig, LevelDriverPresetConfig,
-        MidiBindingAction, MidiBindingCommandKind, MidiBindingConfig, PaletteEntry, TempoSource,
-        UdpInputConfig,
+        AudioDeviceConfig, AudioDeviceFlowConfig, BeatBroadcaster, DomersConfig,
+        LevelDriverPresetConfig, MidiBindingAction, MidiBindingCommandKind, MidiBindingConfig,
+        PaletteEntry, TempoSource, UdpInputConfig,
     };
     use domers_inputs::{MidiCommand, MidiCommandKind};
     use domers_outputs::DomeCommand;
@@ -3482,6 +3479,7 @@ mod tests {
     #[test]
     fn patches_simulator_controls() {
         let mut state = ServerState::default();
+        state.inputs.beat = BeatBroadcaster::default();
         state.patch_simulator_controls(super::SimulatorControlsPatch {
             volume: Some(0.25),
             beat_progress: Some(0.75),
@@ -3937,6 +3935,10 @@ mod tests {
     #[tokio::test]
     async fn sandbox_frame_does_not_patch_runtime_state() {
         let runtime = AppRuntime::default();
+        {
+            let mut state = runtime.state.lock().await;
+            state.inputs.beat = BeatBroadcaster::default();
+        }
         runtime
             .patch_dome_config(super::DomeConfigPatch {
                 active_visualizer: Some(0),
@@ -4072,7 +4074,7 @@ mod tests {
         hardware.send_operator_frame(&config, &frame).await;
 
         let (header, body) = read.await.expect("read joins");
-        let device_index = 880;
+        let device_index = 942;
         let byte_index = device_index * 3;
         assert_eq!(header[0], 0);
         assert_eq!(&body[byte_index..byte_index + 3], &[0xff, 0, 0]);

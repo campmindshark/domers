@@ -9,7 +9,6 @@ mod tv_static;
 mod volume;
 mod wipe;
 
-pub(crate) use wipe::dome_blackout_commands;
 pub(crate) use flash::{
     animate_flash_polygon, clear_flash_strut, flash_layout_struts, FlashPolygonAnimation,
     FlashShape,
@@ -30,3 +29,4 @@ pub(crate) use volume::{
     volume_commands_with_wipe, volume_wipe_commands,
 };
 pub use volume::{VOLUME_GRADIENT_SPEED, VOLUME_ROTATION_SPEED};
+pub(crate) use wipe::dome_blackout_commands;

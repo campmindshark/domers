@@ -30,8 +30,7 @@ fn device_rotation(input: &VisualizerInput, device_id: i32) -> Quaternion {
         .iter()
         .filter_map(|device| *device)
         .find(|device| i32::from(device.device_id) == device_id)
-        .map(|device| device.rotation)
-        .unwrap_or_else(identity_orientation)
+        .map_or_else(identity_orientation, |device| device.rotation)
 }
 
 fn live_devices(input: &VisualizerInput) -> Vec<OrientationDeviceInput> {
@@ -72,21 +71,17 @@ pub(crate) fn quaternion_multi_test_frame(input: VisualizerInput) -> Vec<Rgb> {
 }
 
 /// Per-pixel multi-test color for one hemisphere sample (spot at `(0, 1, 0)`).
-pub(crate) fn quaternion_multi_test_color_at(
-    input: &VisualizerInput,
-    point_index: usize,
-) -> Rgb {
-    let point = &DOME_LED_POINTS
-        .get_or_init(build_dome_led_points)
-        [point_index];
+pub(crate) fn quaternion_multi_test_color_at(input: &VisualizerInput, point_index: usize) -> Rgb {
+    let point = &DOME_LED_POINTS.get_or_init(build_dome_led_points)[point_index];
     let (x, y, z) = spectrum_quaternion_multi_point(point.x, point.y);
     let pixel = (x, y, z);
 
     let devices = live_devices(input);
     if devices.is_empty() {
-        return orientation_from_override(input)
-            .map(|orientation| quaternion_multi_spot_at(orientation, pixel, 0.0, 0.2, 1.0))
-            .unwrap_or(Rgb::BLACK);
+        if let Some(orientation) = orientation_from_override(input) {
+            return quaternion_multi_spot_at(orientation, pixel, 0.0, 0.2, 1.0);
+        }
+        return Rgb::BLACK;
     }
 
     let device_count = devices.len();

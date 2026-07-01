@@ -1,8 +1,6 @@
 use domers_core::Rgb;
 use domers_outputs::{
-    dome_strut_index_for_control_box, dome_strut_length,
-    topology::DOME_STRUTS,
-    DomeCommand,
+    dome_strut_index_for_control_box, dome_strut_length, topology::DOME_STRUTS, DomeCommand,
 };
 
 /// Wall-clock throttled strut iteration matching `LEDDomeStrutIterationDiagnosticVisualizer`.
@@ -37,9 +35,13 @@ impl StrutIterationRuntime {
         self.last_tick_ms = Some(now_ms);
         self.last_index += 1;
 
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "Spectrum scales dome brightness into a clamped 0-255 byte"
+        )]
         let brightness_byte = (255.0_f64 * f64::from(brightness)).clamp(0.0, 255.0) as u32;
-        let white_color =
-            (brightness_byte << 16) | (brightness_byte << 8) | brightness_byte;
+        let white_color = (brightness_byte << 16) | (brightness_byte << 8) | brightness_byte;
         let mut commands = Vec::new();
 
         if self.last_index == 38 {

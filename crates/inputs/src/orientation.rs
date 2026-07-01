@@ -240,11 +240,7 @@ impl OrientationInputState {
     /// Spectrum `OrientationInput.onlyPoi()`.
     #[must_use]
     pub fn only_poi(&self) -> bool {
-        !self.devices.is_empty()
-            && self
-                .devices
-                .values()
-                .all(|device| device.device_type == 2)
+        !self.devices.is_empty() && self.devices.values().all(|device| device.device_type == 2)
     }
 
     /// Number of active devices.

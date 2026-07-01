@@ -1,9 +1,7 @@
 use domers_outputs::DomeCommand;
 
 use crate::{
-    buffer::DomeBuffer,
-    dome::quaternion_multi_test_color_at,
-    input::VisualizerInput,
+    buffer::DomeBuffer, dome::quaternion_multi_test_color_at, input::VisualizerInput,
     math::DOME_GLOBAL_FADE_SPEED,
 };
 

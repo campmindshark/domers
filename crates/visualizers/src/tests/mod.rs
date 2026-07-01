@@ -698,7 +698,9 @@ pub(crate) fn switch_wipes_previous_visualizer() {
     let mut runtime = VisualizerRuntime::default();
     let first = runtime.render_dome(LiveVisualizer::Snakes, VisualizerInput::default());
     assert!(
-        first.iter().any(|command| matches!(command, DomeCommand::Pixel { .. })),
+        first
+            .iter()
+            .any(|command| matches!(command, DomeCommand::Pixel { .. })),
         "snakes activation should begin with a sparse blackout wipe"
     );
     assert!(
@@ -1080,7 +1082,8 @@ fn lit_pixel_fraction(commands: &[DomeCommand]) -> f64 {
         .iter()
         .filter(|color| **color != domers_core::Rgb::BLACK)
         .count();
-    lit as f64 / colors.len() as f64
+    f64::from(u32::try_from(lit).expect("lit count fits in u32"))
+        / f64::from(u32::try_from(colors.len()).expect("pixel count fits in u32"))
 }
 
 #[test]
@@ -1140,7 +1143,9 @@ pub(crate) fn strut_iteration_throttles_to_one_step_per_second() {
     let mut runtime = VisualizerRuntime::default();
     let enable = runtime.render_strut_iteration(0, 1.0);
     assert!(
-        enable.iter().any(|command| matches!(command, DomeCommand::Pixel { .. })),
+        enable
+            .iter()
+            .any(|command| matches!(command, DomeCommand::Pixel { .. })),
         "enable should wipe the dome before stepping"
     );
     let first = runtime.render_strut_iteration(0, 1.0);
@@ -1161,7 +1166,7 @@ pub(crate) fn strut_iteration_throttles_to_one_step_per_second() {
 #[test]
 pub(crate) fn strut_iteration_enable_resets_with_black_frame() {
     let mut runtime = VisualizerRuntime::default();
-    runtime.render_strut_iteration(0, 1.0);
+    let _ = runtime.render_strut_iteration(0, 1.0);
     runtime.clear_strut_iteration();
     let commands = runtime.render_strut_iteration(0, 1.0);
     assert!(

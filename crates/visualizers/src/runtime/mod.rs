@@ -107,7 +107,12 @@ impl VisualizerRuntime {
                     .get_or_insert_with(QuaternionMultiRuntime::new);
                 runtime.render(&input, &mut commands);
             }
-            other => commands.extend(render_dome_visualizer(other, input)),
+            LiveVisualizer::QuaternionTest => {
+                commands.extend(render_dome_visualizer(
+                    LiveVisualizer::QuaternionTest,
+                    input,
+                ));
+            }
         }
 
         commands

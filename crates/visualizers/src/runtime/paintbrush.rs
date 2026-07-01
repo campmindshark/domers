@@ -6,9 +6,7 @@ use crate::{
     color_util::hsv_to_rgb,
     geometry::{distance3, hemisphere_point},
     input::{OrientationDeviceInput, VisualizerInput},
-    math::{
-        spectrum_nudge, DOME_GLOBAL_FADE_SPEED, DOME_GLOBAL_HUE_SPEED, DOME_RADIAL_SIZE,
-    },
+    math::{spectrum_nudge, DOME_GLOBAL_FADE_SPEED, DOME_GLOBAL_HUE_SPEED, DOME_RADIAL_SIZE},
     quaternion::Quaternion,
     rng::DotNetRandom,
 };
@@ -101,8 +99,8 @@ impl PaintbrushRuntime {
 
         self.buffer
             .fade(1.0 - 5f64.powf(-DOME_GLOBAL_FADE_SPEED), 0.0);
-        let hue_rate = (3.0 * progress * progress - 3.0 * progress + 1.0)
-            * 10f64.powf(-DOME_GLOBAL_HUE_SPEED);
+        let hue_rate =
+            (3.0 * progress * progress - 3.0 * progress + 1.0) * 10f64.powf(-DOME_GLOBAL_HUE_SPEED);
         self.buffer.hue_rotate(hue_rate);
         self.counter += 1;
 
@@ -120,8 +118,6 @@ impl PaintbrushRuntime {
         let paint_state = PaintbrushPaintState {
             idle: self.idle,
             current_orientation: self.current_orientation,
-            spotlight_id: self.spotlight_id,
-            spotlight_center: self.spotlight_center,
             only_poi: input.orientation_only_poi,
         };
 
@@ -197,8 +193,11 @@ impl PaintbrushRuntime {
         }
 
         if let Some(orientation) = input.orientation_override {
-            self.current_orientation =
-                Quaternion::from_yaw_pitch_roll(orientation.yaw, orientation.pitch, orientation.roll);
+            self.current_orientation = Quaternion::from_yaw_pitch_roll(
+                orientation.yaw,
+                orientation.pitch,
+                orientation.roll,
+            );
             self.idle = false;
             self.spotlight_id = -1;
             return;
@@ -334,8 +333,6 @@ impl PaintbrushRuntime {
 struct PaintbrushPaintState {
     idle: bool,
     current_orientation: Quaternion,
-    spotlight_id: i32,
-    spotlight_center: Quaternion,
     only_poi: bool,
 }
 
@@ -369,7 +366,7 @@ fn paintbrush_metaball_at(
         let distance = distance3(rx, ry, rz, SPOT_X, SPOT_Y, SPOT_Z);
         let neg_distance = distance3(rx, ry, rz, -SPOT_X, -SPOT_Y, -SPOT_Z);
         let mut scale = 1.0 / (distance * neg_distance);
-        if matches!(device.action_flag, 1 | 2 | 3) {
+        if (1..=3).contains(&device.action_flag) {
             scale *= 4.0;
         }
         if device.device_type == 2 && state.only_poi {
@@ -386,7 +383,7 @@ fn paintbrush_metaball_at(
     }
 
     color_center = color_center.normalize();
-    potential /= device_count as f64;
+    potential /= f64::from(u32::try_from(device_count).expect("device count fits in u32"));
     let hue = (1.0 + color_center.w) / 2.0;
     (potential, hue, color_center.w)
 }

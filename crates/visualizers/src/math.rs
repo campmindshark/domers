@@ -13,7 +13,6 @@ pub(crate) const DOME_RADIAL_FREQUENCY: f64 = 1.0;
 pub(crate) const DOME_RADIAL_SIZE: f64 = 0.1;
 /// Golden capture fixture value kept for deterministic first-frame tests only.
 pub(crate) const DOME_RADIAL_SIZE_GOLDEN: f64 = 1.0;
-pub(crate) const DOME_TWINKLE_DENSITY: f64 = 0.0;
 pub(crate) const SPLAT_FADE: f64 = 0.96;
 
 pub(crate) fn polar_to_cartesian(angle: f64, distance: f64) -> (f64, f64) {
