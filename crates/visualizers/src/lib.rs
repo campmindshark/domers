@@ -386,6 +386,7 @@ pub struct VisualizerRuntime {
     tv_static: Option<TvStaticRuntime>,
     volume: Option<VolumeRuntime>,
     flash: Option<FlashRuntime>,
+    paintbrush: Option<PaintbrushRuntime>,
 }
 
 impl VisualizerRuntime {
@@ -440,6 +441,10 @@ impl VisualizerRuntime {
                 let runtime = self.flash.get_or_insert_with(FlashRuntime::new);
                 runtime.render(&input, &mut commands);
             }
+            LiveVisualizer::QuaternionPaintbrush => {
+                let runtime = self.paintbrush.get_or_insert_with(PaintbrushRuntime::new);
+                runtime.render(&input, &mut commands);
+            }
             other => commands.extend(render_dome_visualizer(other, input)),
         }
 
@@ -455,6 +460,7 @@ impl VisualizerRuntime {
         self.tv_static = None;
         self.volume = None;
         self.flash = None;
+        self.paintbrush = None;
     }
 }
 
@@ -639,9 +645,7 @@ impl FlashRuntime {
 
     fn render(&mut self, input: &VisualizerInput, out: &mut Vec<DomeCommand>) {
         let now_ms = input.now_ms;
-        let mut wrote_pixels = false;
 
-        let mut finished_shape_indices = Vec::new();
         for (shape_index, shape) in self.shapes.iter_mut().enumerate() {
             let Some(animation) = shape.animation.as_ref() else {
                 continue;
@@ -649,13 +653,11 @@ impl FlashRuntime {
             if animation.active(now_ms, FlashShape::enabled()) {
                 continue;
             }
-            finished_shape_indices.push(shape_index);
             if self.pads_to_last_animation[animation.pad as usize] == Some(shape_index) {
                 self.pads_to_last_animation[animation.pad as usize] = None;
             }
             for &strut_index in &shape.struts {
                 clear_flash_strut(strut_index, out);
-                wrote_pixels = true;
             }
             shape.animation = None;
         }
@@ -696,11 +698,6 @@ impl FlashRuntime {
                 continue;
             }
             animate_flash_polygon(shape, animation, input, now_ms, out);
-            wrote_pixels = true;
-        }
-
-        if wrote_pixels {
-            out.push(DomeCommand::Flush);
         }
     }
 
@@ -754,9 +751,8 @@ impl SnakesRuntime {
         )
         .unwrap_or(SNAKES_MAX_CATCHUP_STEPS);
         for _ in 0..steps {
-            self.state.step(&input.palette, out);
+            self.state.step(input, out);
         }
-        out.push(DomeCommand::Flush);
         self.last_step_ms = Some(now);
     }
 }
@@ -972,6 +968,10 @@ impl DomeBufferPixel {
         self.r = f64::from((packed >> 16) & 0xff);
         self.g = f64::from((packed >> 8) & 0xff);
         self.b = f64::from(packed & 0xff);
+    }
+
+    fn blend_light_paint(&mut self, paint: Rgb) {
+        self.set_color(light_paint(self.rgb(), paint));
     }
 
     fn update_color(&mut self) {
@@ -1292,6 +1292,226 @@ impl SplatRuntime {
         self.last_progress = progress;
         self.seen_first = true;
         out.extend(self.buffer.frame_commands());
+    }
+}
+
+const DOME_TWINKLE_DENSITY: f64 = 0.0;
+const DOME_RIPPLE_CD_STEP: f64 = 1.0;
+const DOME_RIPPLE_STEP: f64 = 1.0;
+
+/// Persistent Paintbrush runtime mirroring `LEDDomeQuaternionPaintbrushVisualizer`.
+#[derive(Clone, Debug)]
+struct PaintbrushRuntime {
+    buffer: DomeBuffer,
+    rng: DotNetRandom,
+    yaw: f64,
+    pitch: f64,
+    roll: f64,
+    yaw_momentum: f64,
+    pitch_momentum: f64,
+    roll_momentum: f64,
+    counter: u64,
+    cooldown: i32,
+    stamp_fired: bool,
+    stamp_effect: i32,
+    last_progress: f64,
+    ripple_counter: f64,
+    ripple_firing: bool,
+    ripple_cooldown: f64,
+    ripple_type: i32,
+    contour_counter: f64,
+    stamp_center: Quaternion,
+    ripple_center: Quaternion,
+}
+
+impl PaintbrushRuntime {
+    fn new() -> Self {
+        Self {
+            buffer: DomeBuffer::new(),
+            rng: DotNetRandom::new(0),
+            yaw: 0.0,
+            pitch: -0.25,
+            roll: 0.0,
+            yaw_momentum: 0.0,
+            pitch_momentum: 0.0005,
+            roll_momentum: 0.0,
+            counter: 0,
+            cooldown: 7,
+            stamp_fired: false,
+            stamp_effect: 0,
+            last_progress: 0.0,
+            ripple_counter: 0.0,
+            ripple_firing: false,
+            ripple_cooldown: 100.0,
+            ripple_type: 0,
+            contour_counter: 0.0,
+            stamp_center: Quaternion {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+            ripple_center: Quaternion {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            },
+        }
+    }
+
+    fn render(&mut self, input: &VisualizerInput, out: &mut Vec<DomeCommand>) {
+        let progress = input.beat_progress;
+        let level = f64::from(input.volume.clamp(0.0, 1.0));
+
+        self.buffer
+            .fade(1.0 - 5f64.powf(-DOME_GLOBAL_FADE_SPEED), 0.0);
+        let hue_rate =
+            (3.0 * progress * progress - 3.0 * progress + 1.0) * 10f64.powf(-DOME_GLOBAL_HUE_SPEED);
+        self.buffer.hue_rotate(hue_rate);
+        self.counter += 1;
+
+        let orientation = self.idle_orientation(input);
+        self.update_stamp_and_ripple(level, progress, orientation);
+        self.contour_counter += 4.0 * level;
+        if self.contour_counter >= 100.0 {
+            self.contour_counter = 0.0;
+        }
+
+        let threshold_factor = DOME_RADIAL_SIZE / 4.0 + level + 0.01;
+        let threshold = 2.0 / threshold_factor;
+        let saturation = (1.3 / level.max(0.01) - 1.0).clamp(0.2, 1.0);
+        let metaball_hue = (1.0 + orientation.w) / 2.0;
+
+        for pixel in &mut self.buffer.pixels {
+            let (x, y, z) = hemisphere_point(pixel.x, pixel.y);
+            let (rx, ry, rz) = orientation.transform_vector(x, y, z);
+            let distance = distance3(rx, ry, rz, -1.0, 0.0, 0.0);
+            let neg_distance = distance3(rx, ry, rz, 1.0, 0.0, 0.0);
+            let potential = 1.0 / (distance * neg_distance);
+            let strength = potential - threshold;
+
+            let twinkle_roll = self.rng.next_double();
+            if twinkle_roll < DOME_TWINKLE_DENSITY && z > 0.2 {
+                pixel.set_color(Rgb::from_u24(0xff_ff_ff));
+            }
+
+            if strength > 0.0 {
+                pixel.blend_light_paint(hsv_to_rgb(metaball_hue, saturation, 1.0));
+            }
+
+            if self.ripple_firing && self.ripple_counter > 0.0 {
+                let (tx, ty, tz) = self.ripple_center.transform_vector(x, y, z);
+                let ripple_radius = self.ripple_counter / 300.0;
+                let distance_to_spot = distance3(tx, ty, tz, -1.0, 0.0, 0.0);
+                if (distance_to_spot - ripple_radius).abs() < 0.012 {
+                    let ripple_saturation = (1.0 - self.ripple_counter / 600.0).clamp(0.0, 1.0);
+                    let ripple_value = (1.0 - self.ripple_counter / 800.0).clamp(0.0, 1.0);
+                    pixel.blend_light_paint(hsv_to_rgb(
+                        metaball_hue,
+                        ripple_saturation,
+                        ripple_value,
+                    ));
+                }
+            }
+
+            if self.stamp_fired {
+                let (sx, sy, sz) = self.stamp_center.transform_vector(x, y, z);
+                let distance_to_spot = distance3(sx, sy, sz, -1.0, 0.0, 0.0);
+                if self.stamp_effect == 1 && distance_to_spot.rem_euclid(0.4) < 0.05 {
+                    pixel.set_color(hsv_to_rgb(metaball_hue, 0.2, 1.0));
+                } else if self.stamp_effect == 2 {
+                    let ring_distance =
+                        2.4 - (1.8 / (4.0 - f64::from(self.cooldown) / 2.0)).clamp(0.0, 2.4);
+                    let half_width = 0.003 * f64::from(self.cooldown * self.cooldown);
+                    if (ring_distance - half_width..=ring_distance + half_width)
+                        .contains(&distance_to_spot)
+                    {
+                        pixel.set_color(hsv_to_rgb(metaball_hue, 0.2, 1.0));
+                    }
+                }
+            }
+        }
+
+        if self.cooldown < 7 && self.stamp_effect == 1 {
+            self.stamp_fired = false;
+        }
+        self.last_progress = progress;
+        out.extend(self.buffer.frame_commands());
+    }
+
+    fn idle_orientation(&mut self, input: &VisualizerInput) -> Quaternion {
+        if let Some(orientation) = input.orientation_override {
+            return Quaternion::from_yaw_pitch_roll(
+                orientation.yaw,
+                orientation.pitch,
+                orientation.roll,
+            );
+        }
+        if let Some(device) = input.orientation_devices.iter().find_map(|device| *device) {
+            return device.rotation;
+        }
+
+        let noise = 0.0001;
+        self.yaw_momentum =
+            (self.yaw_momentum + spectrum_nudge(&mut self.rng, noise)).clamp(-0.001, 0.001);
+        self.roll_momentum =
+            (self.roll_momentum + spectrum_nudge(&mut self.rng, noise)).clamp(-0.001, 0.001);
+        self.pitch_momentum =
+            (self.pitch_momentum + spectrum_nudge(&mut self.rng, noise)).clamp(-0.001, 0.001);
+
+        let motion_scale = 4.0 * (f64::from(input.volume.clamp(0.0, 1.0)) + 0.25);
+        self.yaw += motion_scale * self.yaw_momentum;
+        self.pitch += motion_scale * self.pitch_momentum;
+        self.roll += motion_scale * self.roll_momentum;
+
+        Quaternion::from_unitless_yaw_pitch_roll(self.yaw, self.pitch, self.roll)
+    }
+
+    fn update_stamp_and_ripple(&mut self, level: f64, progress: f64, orientation: Quaternion) {
+        if self.cooldown > 0 && self.last_progress > progress {
+            self.cooldown -= 1;
+            if self.cooldown <= 0 {
+                self.stamp_fired = false;
+            }
+        }
+        if self.counter > 1_000 && level > 0.3 {
+            self.stamp_fired = true;
+            self.counter = 0;
+            self.cooldown = 10;
+            let mut effect = self.stamp_effect;
+            if effect == 0 {
+                effect = 1;
+            }
+            if effect == 1 {
+                effect = 2;
+            }
+            if effect == 2 {
+                effect = 1;
+            }
+            self.stamp_effect = effect;
+            self.stamp_center = orientation;
+        }
+
+        if self.ripple_counter > 1_000.0 {
+            self.ripple_counter = 0.0;
+            self.ripple_firing = false;
+        }
+        if !self.ripple_firing {
+            self.ripple_cooldown -= DOME_RIPPLE_CD_STEP;
+        }
+        if self.ripple_cooldown < 0.0 {
+            self.ripple_firing = true;
+            self.ripple_type = (self.ripple_type + 1) % 2;
+            self.ripple_center = orientation;
+            self.ripple_cooldown = 100.0;
+        }
+        if self.ripple_firing {
+            self.ripple_counter += DOME_RIPPLE_STEP;
+            if self.ripple_type == 1 {
+                self.ripple_center = orientation;
+            }
+        }
     }
 }
 
@@ -1919,7 +2139,7 @@ fn volume_commands_with_wipe(
     let total_parts = VOLUME_ANIMATION_SIZE;
     let volume_split_into = 2 * ((total_parts - 1) / 2 + 1);
     let level = f64::from(input.volume.clamp(0.0, 1.0));
-    let gradient_focus = beat_progress;
+    let gradient_focus = progress_through_beat(beat_progress, VOLUME_GRADIENT_SPEED);
     let mut commands = if include_wipe {
         volume_wipe_commands()
     } else {
@@ -2094,7 +2314,17 @@ fn volume_color_from_part(
     reason = "Spectrum truncates ProgressThroughBeat times four to choose the volume center"
 )]
 fn volume_center_offset(beat_progress: f64) -> usize {
-    (beat_progress * 4.0) as usize
+    (progress_through_beat(beat_progress, VOLUME_ROTATION_SPEED) * 4.0) as usize
+}
+
+/// Mirror `BeatBroadcaster.ProgressThroughBeat` for injected measure progress.
+fn progress_through_beat(beat_progress: f64, factor: f64) -> f64 {
+    if factor == 0.0 {
+        return 0.0;
+    }
+    let beat_length = 1.0 / factor;
+    let progress_in_beat = beat_progress % beat_length;
+    progress_in_beat / beat_length
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2437,9 +2667,6 @@ fn animate_flash_polygon(
 }
 
 fn flash_pad_single_color(input: &VisualizerInput, pad: u8) -> Rgb {
-    if !input.flash_active {
-        return Rgb::BLACK;
-    }
     scale_rgb_f64(
         input.palette_entries[pad as usize % input.palette_entries.len()].single_color(),
         input.dome_brightness,
@@ -2447,9 +2674,6 @@ fn flash_pad_single_color(input: &VisualizerInput, pad: u8) -> Rgb {
 }
 
 fn flash_pad_gradient_color(input: &VisualizerInput, pad: u8, pixel_pos: f64) -> Rgb {
-    if !input.flash_active {
-        return Rgb::BLACK;
-    }
     scale_rgb_f64(
         input.palette_entries[pad as usize % input.palette_entries.len()]
             .gradient_color(pixel_pos, 0.0, false),
@@ -3183,8 +3407,11 @@ impl SnakesState {
     }
 
     /// Advance one throttled Spectrum update, emitting the delta commands.
-    fn step(&mut self, palette: &[Rgb; 8], out: &mut Vec<DomeCommand>) {
-        let trailing_color = palette[self.color_palette_index.unsigned_abs() as usize % 8];
+    fn step(&mut self, input: &VisualizerInput, out: &mut Vec<DomeCommand>) {
+        let trailing_color = scale_rgb_f64(
+            input.palette[self.color_palette_index.unsigned_abs() as usize % 8],
+            input.dome_brightness,
+        );
         for snake in &mut self.snakes {
             progress_snake(snake, &mut self.rng, trailing_color, out);
         }
@@ -3281,7 +3508,7 @@ fn snakes_commands(input: VisualizerInput) -> Vec<DomeCommand> {
     let mut out = Vec::new();
     for _ in 0..steps {
         out.clear();
-        state.step(&input.palette, &mut out);
+        state.step(&input, &mut out);
     }
     out
 }
@@ -3414,27 +3641,27 @@ pub struct Quaternion {
 }
 
 impl Quaternion {
+    fn from_unitless_yaw_pitch_roll(yaw: f64, pitch: f64, roll: f64) -> Self {
+        Self::from_yaw_pitch_roll_f32(
+            (std::f64::consts::TAU * yaw) as f32,
+            (std::f64::consts::TAU * pitch) as f32,
+            (std::f64::consts::TAU * roll) as f32,
+        )
+    }
+
     fn from_yaw_pitch_roll(yaw: f64, pitch: f64, roll: f64) -> Self {
-        let (half_yaw_sin, half_yaw_cos) = (yaw * 0.5).sin_cos();
-        let (half_pitch_sin, half_pitch_cos) = (pitch * 0.5).sin_cos();
-        let (half_roll_sin, half_roll_cos) = (roll * 0.5).sin_cos();
+        Self::from_yaw_pitch_roll_f32(yaw as f32, pitch as f32, roll as f32)
+    }
+
+    fn from_yaw_pitch_roll_f32(yaw: f32, pitch: f32, roll: f32) -> Self {
+        let (sy, cy) = (yaw * 0.5).sin_cos();
+        let (sp, cp) = (pitch * 0.5).sin_cos();
+        let (sr, cr) = (roll * 0.5).sin_cos();
         Self {
-            x: half_yaw_cos.mul_add(
-                half_pitch_sin * half_roll_cos,
-                half_yaw_sin * half_pitch_cos * half_roll_sin,
-            ),
-            y: half_yaw_sin.mul_add(
-                half_pitch_cos * half_roll_cos,
-                -half_yaw_cos * half_pitch_sin * half_roll_sin,
-            ),
-            z: half_yaw_cos.mul_add(
-                half_pitch_cos * half_roll_sin,
-                -half_yaw_sin * half_pitch_sin * half_roll_cos,
-            ),
-            w: half_yaw_cos.mul_add(
-                half_pitch_cos * half_roll_cos,
-                half_yaw_sin * half_pitch_sin * half_roll_sin,
-            ),
+            x: f64::from(cy.mul_add(sp * cr, sy * cp * sr)),
+            y: f64::from(sy.mul_add(cp * cr, -cy * sp * sr)),
+            z: f64::from(cy.mul_add(cp * sr, -sy * sp * cr)),
+            w: f64::from(cy.mul_add(cp * cr, sy * sp * sr)),
         }
         .normalize()
     }
@@ -4354,7 +4581,7 @@ mod tests {
             accent: palette[2],
             palette,
             palette_entries,
-            dome_brightness: config.dome.brightness,
+            dome_brightness: 1.0,
         }
     }
 
@@ -5003,5 +5230,85 @@ mod tests {
         assert!(commands
             .iter()
             .any(|command| matches!(command, domers_outputs::StageCommand::Flush)));
+    }
+
+    #[test]
+    fn flash_frame2_hash_for_shape_57() {
+        let config = import_spectrum_xml(include_str!(
+            "../../../fixtures/config/spectrum_default_config.xml"
+        ))
+        .config;
+        let manifest: SequenceManifest = serde_json::from_str(include_str!(
+            "../../../fixtures/spectrum-csharp/visualizer_sequence_cases.json"
+        ))
+        .unwrap();
+        let case = manifest
+            .cases
+            .iter()
+            .find(|c| c.case == "dome_flash_idle_and_active_placeholder")
+            .unwrap();
+        let expected = case.expected.frames[2].parse::<u64>().unwrap();
+        let meta = &manifest.capture_metadata;
+        let frame_input = &case.input_sequence[2];
+        let start_ms = ((meta.clock_base_ticks + 500_000) / 10_000) as u64;
+        let now_ms = ((meta.clock_base_ticks + 1_000_000) / 10_000) as u64;
+        let mut input = visualizer_input(frame_input, &config);
+        input.now_ms = now_ms;
+        input.measure_length_ms = Some(meta.beat_measure_ms);
+
+        let layout = super::concentric_layout_from_point(57, 2);
+        let struts = super::flash_layout_struts(&layout);
+        let shape = super::FlashShape {
+            layout,
+            struts,
+            animation: None,
+        };
+        let animation =
+            super::FlashPolygonAnimation::new(0, 0.8, meta.beat_measure_ms, start_ms);
+        let mut commands = Vec::new();
+        super::animate_flash_polygon(&shape, &animation, &input, now_ms, &mut commands);
+        let actual = frame_hash(&commands);
+        assert_eq!(Some(actual), Some(expected));
+    }
+
+    #[test]
+    fn flash_runtime_replay_matches_direct_frame2() {
+        let config = import_spectrum_xml(include_str!(
+            "../../../fixtures/config/spectrum_default_config.xml"
+        ))
+        .config;
+        let manifest: SequenceManifest = serde_json::from_str(include_str!(
+            "../../../fixtures/spectrum-csharp/visualizer_sequence_cases.json"
+        ))
+        .unwrap();
+        let case = manifest
+            .cases
+            .iter()
+            .find(|c| c.case == "dome_flash_idle_and_active_placeholder")
+            .unwrap();
+        let expected = case.expected.frames[2].parse::<u64>().unwrap();
+        let meta = &manifest.capture_metadata;
+        let frame_delta = case.frame_delta_ticks.unwrap_or(meta.frame_delta_ticks);
+        let mut runtime = VisualizerRuntime::default();
+        for (frame_index, frame_input) in case.input_sequence.iter().enumerate().take(3) {
+            let now_ticks = meta.clock_base_ticks + (frame_index as i64) * frame_delta;
+            let now_ms = (now_ticks / 10_000) as u64;
+            let mut input = visualizer_input(frame_input, &config);
+            input.now_ms = now_ms;
+            input.measure_length_ms = Some(meta.beat_measure_ms);
+            input.midi_notes = [None; MAX_FRAME_MIDI_NOTES];
+            for (slot, note) in frame_input
+                .midi
+                .iter()
+                .enumerate()
+                .take(MAX_FRAME_MIDI_NOTES)
+            {
+                input.midi_notes[slot] = Some(*note);
+            }
+            let commands = runtime.render_dome(LiveVisualizer::Flash, input);
+            if frame_index == 2 {
+                assert_eq!(Some(frame_hash(&commands)), Some(expected));
+            }
+        }
     }
 }
