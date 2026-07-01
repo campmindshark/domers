@@ -7,7 +7,7 @@
 - `domers-core`: shared colors, Spectrum palette semantics, beat timing, config types, TOML config import, and migration warnings.
 - `domers-engine`: scheduler and frame orchestration.
 - `domers-outputs`: dome/bar/stage commands, topology, simulator sinks, and OPC encoding.
-- `domers-inputs`: audio/MIDI payload parsing, Madmom and Link sidecar parsing, and orientation datagram classification.
+- `domers-inputs`: audio/MIDI payload parsing, Madmom and DJ Link sidecar parsing, and orientation datagram classification.
 - `domers-visualizers`: visualizer inventory, dome/bar/stage renderers, diagnostics, and frame-hash harnesses.
 - `domers-server`: runtime state, HTTP/WebSocket API, input tasks, simulator frames, and hardware output.
 - `domers-test-support`: fake clocks and deterministic test utilities.
@@ -32,7 +32,7 @@ flowchart LR
   subgraph Inputs["Input adapters"]
     Udp["UDP audio / MIDI / orientation"]
     Native["CPAL / midir<br/>native-capture builds"]
-    Beat["Tap tempo<br/>Madmom<br/>Link / Carabiner"]
+    Beat["Tap tempo<br/>Madmom<br/>DJ Link / Carabiner"]
   end
 
   subgraph Frame["Frame pipeline"]
@@ -105,7 +105,7 @@ HTTP and WebSocket surface:
 
 - Engine target: 400 Hz compute cap.
 - OPC target: independent 200 Hz send cap.
-- Browser simulator: throttled stream derived from engine frames, targeting roughly one browser paint per display frame while the preview is open.
+- Browser simulator: server frames are emitted every 10 ms from the 400 Hz engine loop, matching Spectrum's WPF simulator timer; the browser still coalesces paints with `requestAnimationFrame`.
 
 Timing tests use this shape:
 
@@ -134,7 +134,7 @@ The live control page keeps simulator work lazy. It fetches runtime state on loa
 
 ## Beat And Input Runtime
 
-The runtime accepts tap tempo, MIDI commands, audio volume samples, orientation datagrams, Madmom-compatible `BEAT:{seconds}` lines, and Link/Carabiner-compatible tempo lines through explicit input paths. `domers run` can start optional UDP adapters for audio, MIDI, and orientation, and optional native CPAL/midir capture in `native-capture` builds. It manages the Madmom sidecar when `tempo.source = "madmom"` and the Link sidecar when `tempo.source = "link"`. Human tap tempo uses wall-clock input time rather than engine frame time. The server exposes adapter targets, event counters, MIDI level-driver values, orientation devices, and last errors in `/api/state`.
+The runtime accepts tap tempo, MIDI commands, audio volume samples, orientation datagrams, Madmom-compatible `BEAT:{seconds}` lines, and DJ Link/Carabiner-compatible tempo lines through explicit input paths. `domers run` can start optional UDP adapters for audio, MIDI, and orientation, and optional native CPAL/midir capture in `native-capture` builds. It manages the Madmom sidecar when `tempo.source = "madmom"` and the DJ Link sidecar when `tempo.source = "link"`. Human tap tempo uses wall-clock input time rather than engine frame time. The server exposes adapter targets, event counters, MIDI level-driver values, orientation devices, and last errors in `/api/state`.
 
 ## Intentional Deviations
 

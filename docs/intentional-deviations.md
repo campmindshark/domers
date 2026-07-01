@@ -50,7 +50,7 @@ cargo run --bin domers -- import-spectrum-xml <spectrum.xml> <domers.toml>
 
 **Spectrum:** WPF simulator windows consume command queues in-process and redraw on timer ticks. The dome simulator timer runs every 10 ms in the WPF window.
 
-**dome-rs:** Browser simulator frames come from engine/server-rendered frames. The live controls page opens a WebSocket only while the `Preview` drawer is open, and the browser coalesces incoming frames through `requestAnimationFrame` so stale frames are dropped instead of over-rendered. The dedicated `/simulator` page renders request-local sandbox frames through `POST /api/simulator/sandbox-frame`, so its controls do not patch runtime config or hardware output. The browser does not read OPC hardware sockets.
+**dome-rs:** Browser simulator frames come from engine/server-rendered frames. The server emits one simulator frame every four 400 Hz engine frames, matching Spectrum's 10 ms simulator timer. The live controls page opens a WebSocket only while the `Preview` drawer is open, and the browser coalesces incoming frames through `requestAnimationFrame` so stale frames are dropped instead of over-rendered. The dedicated `/simulator` page renders request-local sandbox frames through `POST /api/simulator/sandbox-frame`, so its controls do not patch runtime config or hardware output. The browser does not read OPC hardware sockets.
 
 **Reason:** The simulator needs to run without hardware and display intended engine output, not network side effects.
 
