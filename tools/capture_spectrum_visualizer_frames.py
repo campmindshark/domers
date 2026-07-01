@@ -64,8 +64,9 @@ using Spectrum.LEDs;
 using Spectrum.MIDI;
 using XSerializer;
 
-record CaptureCase(string Case, string Name, string Classification, CaptureInput Input, List<CaptureInput> InputSequence, bool HasSequence);
-record CaptureInput(double Volume, double BeatProgress, bool FlashActive, int DiagnosticState, int DiagnosticStep, int PaletteSlot);
+record CaptureCase(string Case, string Name, string Classification, CaptureInput Input, List<CaptureInput> InputSequence, bool HasSequence, long FrameDeltaTicks);
+record MidiNote(int Index, double Value);
+record CaptureInput(double Volume, double BeatProgress, bool FlashActive, int DiagnosticState, int DiagnosticStep, int PaletteSlot, List<MidiNote> MidiNotes);
 record CaptureResult(string Case, string Name, string Status, string Value, List<string> Frames, string? Error);
 
 class Program {
@@ -408,7 +409,8 @@ static int Main(string[] args) {
           frameInput.GetProperty("flash_active").GetBoolean(),
           frameInput.GetProperty("diagnostic_state").GetInt32(),
           frameInput.GetProperty("diagnostic_step").GetInt32(),
-          frameInput.GetProperty("palette_slot").GetInt32()
+          frameInput.GetProperty("palette_slot").GetInt32(),
+          ParseMidiNotes(frameInput)
         ));
       }
     }
@@ -419,9 +421,13 @@ static int Main(string[] args) {
         input.GetProperty("flash_active").GetBoolean(),
         input.GetProperty("diagnostic_state").GetInt32(),
         input.GetProperty("diagnostic_step").GetInt32(),
-        input.GetProperty("palette_slot").GetInt32()
+        input.GetProperty("palette_slot").GetInt32(),
+        ParseMidiNotes(input)
       ));
     }
+    long caseDelta = item.TryGetProperty("frame_delta_ticks", out var fdt) && fdt.TryGetInt64(out var fdtVal) && fdtVal > 0
+      ? fdtVal
+      : FrameDeltaTicks();
     cases.Add(new CaptureCase(
       item.GetProperty("case").GetString()!,
       item.GetProperty("name").GetString()!,
@@ -432,10 +438,12 @@ static int Main(string[] args) {
         input.GetProperty("flash_active").GetBoolean(),
         input.GetProperty("diagnostic_state").GetInt32(),
         input.GetProperty("diagnostic_step").GetInt32(),
-        input.GetProperty("palette_slot").GetInt32()
+        input.GetProperty("palette_slot").GetInt32(),
+        ParseMidiNotes(input)
       ),
       sequence,
-      hasSequence
+      hasSequence,
+      caseDelta
     ));
   }
 

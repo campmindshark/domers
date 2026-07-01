@@ -3591,6 +3591,123 @@ mod tests {
         );
     }
 
+    #[derive(Deserialize)]
+    struct SequenceManifest {
+        capture_metadata: SequenceMeta,
+        cases: Vec<SequenceCase>,
+    }
+
+    #[derive(Deserialize)]
+    struct SequenceMeta {
+        frame_delta_ticks: i64,
+        clock_base_ticks: i64,
+        beat_measure_ms: u32,
+    }
+
+    #[derive(Deserialize)]
+    struct SequenceCase {
+        case: String,
+        name: String,
+        expected: SequenceExpected,
+        input_sequence: Vec<ManifestInput>,
+    }
+
+    #[derive(Deserialize)]
+    struct SequenceExpected {
+        status: String,
+        #[serde(default)]
+        frames: Vec<String>,
+    }
+
+    /// C# `TimeSpan.TicksPerMillisecond`, used to convert the capture clock's
+    /// tick counter into the wall-clock milliseconds the runtime consumes.
+    const TICKS_PER_MS: i64 = 10_000;
+
+    fn live_visualizer_for_manifest_name(name: &str) -> Option<LiveVisualizer> {
+        Some(match name {
+            "LEDDomeVolumeVisualizer" => LiveVisualizer::Volume,
+            "LEDDomeRadialVisualizer" => LiveVisualizer::Radial,
+            "LEDDomeRaceVisualizer" => LiveVisualizer::Race,
+            "LEDDomeSnakesVisualizer" => LiveVisualizer::Snakes,
+            "LEDDomeSplatVisualizer" => LiveVisualizer::Splat,
+            "LEDDomeQuaternionTestVisualizer" => LiveVisualizer::QuaternionTest,
+            "LEDDomeQuaternionMultiTestVisualizer" => LiveVisualizer::QuaternionMultiTest,
+            "LEDDomeQuaternionPaintbrushVisualizer" => LiveVisualizer::QuaternionPaintbrush,
+            "LEDDomeTVStaticVisualizer" => LiveVisualizer::TvStatic,
+            "LEDDomeFlashVisualizer" => LiveVisualizer::Flash,
+            _ => return None,
+        })
+    }
+
+    /// Replay one captured multi-frame Spectrum sequence through the persistent
+    /// `VisualizerRuntime` and compare each frame's FNV-1a hash to the C# golden.
+    /// Ignored by default: run explicitly while converging exactness.
+    #[test]
+    #[ignore = "run explicitly while converging Spectrum sequence goldens"]
+    #[allow(
+        clippy::cast_possible_wrap,
+        clippy::cast_sign_loss,
+        reason = "capture clock ticks and frame counts stay well within range"
+    )]
+    fn rust_visualizer_sequences_match_spectrum_csharp_goldens() {
+        let manifest: SequenceManifest = serde_json::from_str(include_str!(
+            "../../../fixtures/spectrum-csharp/visualizer_sequence_cases.json"
+        ))
+        .expect("sequence manifest parses");
+        let config = import_spectrum_xml(include_str!(
+            "../../../fixtures/config/spectrum_default_config.xml"
+        ))
+        .config;
+        let meta = &manifest.capture_metadata;
+        let mut mismatches = Vec::new();
+        let mut checked = 0usize;
+
+        for test_case in &manifest.cases {
+            if test_case.expected.status != "captured" {
+                continue;
+            }
+            let Some(visualizer) = live_visualizer_for_manifest_name(&test_case.name) else {
+                // Stage/bar sequences are hashed on their own outputs, not the
+                // dome runtime; they are covered elsewhere.
+                continue;
+            };
+            checked += 1;
+
+            let mut runtime = VisualizerRuntime::default();
+            for (frame_index, frame_input) in test_case.input_sequence.iter().enumerate() {
+                let now_ticks =
+                    meta.clock_base_ticks + (frame_index as i64) * meta.frame_delta_ticks;
+                let now_ms = (now_ticks / TICKS_PER_MS) as u64;
+
+                let mut input = visualizer_input(*frame_input, &config);
+                input.now_ms = now_ms;
+                input.measure_length_ms = Some(meta.beat_measure_ms);
+
+                let commands = runtime.render_dome(visualizer, input);
+                let actual = frame_hash(&commands);
+                let expected = test_case
+                    .expected
+                    .frames
+                    .get(frame_index)
+                    .and_then(|value| value.parse::<u64>().ok());
+                if expected != Some(actual) {
+                    mismatches.push(format!(
+                        "{} / {} frame {frame_index}: expected {expected:?}, got {actual}",
+                        test_case.case, test_case.name
+                    ));
+                }
+            }
+        }
+
+        assert!(checked > 0, "no captured dome sequences to verify");
+        assert!(
+            mismatches.is_empty(),
+            "Rust sequence hashes differ from Spectrum C# goldens ({} of them):\n{}",
+            mismatches.len(),
+            mismatches.join("\n")
+        );
+    }
+
     fn render_manifest_case_hash(
         test_case: &VisualizerCase,
         config: &domers_core::DomersConfig,
