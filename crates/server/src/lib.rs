@@ -393,6 +393,14 @@ impl SimulatorControls {
                 .color_palette
                 .single_color(index, config.color_palette_index)
         });
+        let palette_entries = std::array::from_fn(|index| {
+            config
+                .color_palette
+                .entry(domers_core::ColorPalette::absolute_index(
+                    index,
+                    config.color_palette_index,
+                ))
+        });
         VisualizerInput {
             volume: self.volume,
             beat_progress: self.beat_progress,
@@ -403,6 +411,7 @@ impl SimulatorControls {
             secondary: palette[1],
             accent: palette[2],
             palette,
+            palette_entries,
         }
     }
 
@@ -2255,6 +2264,16 @@ pub struct SimulatorSandboxRequest {
 
 impl SimulatorSandboxRequest {
     fn visualizer_input(self) -> VisualizerInput {
+        let palette_entries = [
+            domers_core::PaletteEntry::solid(self.primary.unwrap_or(0x00_ff_00)),
+            domers_core::PaletteEntry::solid(self.secondary.unwrap_or(0x00_80_ff)),
+            domers_core::PaletteEntry::solid(self.accent.unwrap_or(0xff_40_80)),
+            domers_core::PaletteEntry::solid(0xff_ff_00),
+            domers_core::PaletteEntry::solid(0xff_00_ff),
+            domers_core::PaletteEntry::solid(0x00_ff_ff),
+            domers_core::PaletteEntry::solid(0xff_ff_ff),
+            domers_core::PaletteEntry::solid(0),
+        ];
         VisualizerInput {
             volume: self.volume.unwrap_or(0.7).clamp(0.0, 1.0),
             beat_progress: self.beat_progress.unwrap_or(0.25).clamp(0.0, 1.0),
@@ -2280,6 +2299,7 @@ impl SimulatorSandboxRequest {
                 domers_core::Rgb::from_u24(0xff_ff_ff),
                 domers_core::Rgb::BLACK,
             ],
+            palette_entries,
         }
     }
 }

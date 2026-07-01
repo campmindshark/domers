@@ -1,6 +1,6 @@
 //! Visualizer inventory and porting order.
 
-use domers_core::{ColorPalette, Rgb};
+use domers_core::{ColorPalette, PaletteEntry, Rgb};
 use domers_outputs::{
     dome_strut_index_for_control_box, dome_strut_length,
     topology::{DOME_PIXELS, DOME_STRUTS, STAGE_LAYERS},
@@ -206,6 +206,8 @@ pub struct VisualizerInput {
     pub accent: Rgb,
     /// Active Spectrum palette bank colors 0-7.
     pub palette: [Rgb; 8],
+    /// Active Spectrum palette bank entries 0-7.
+    pub palette_entries: [PaletteEntry; 8],
 }
 
 impl Default for VisualizerInput {
@@ -231,6 +233,16 @@ impl Default for VisualizerInput {
                 Rgb::from_u24(0x00_ff_ff),
                 Rgb::from_u24(0xff_ff_ff),
                 Rgb::BLACK,
+            ],
+            palette_entries: [
+                PaletteEntry::solid(primary.to_u24()),
+                PaletteEntry::solid(secondary.to_u24()),
+                PaletteEntry::solid(accent.to_u24()),
+                PaletteEntry::solid(0xff_ff_00),
+                PaletteEntry::solid(0xff_00_ff),
+                PaletteEntry::solid(0x00_ff_ff),
+                PaletteEntry::solid(0xff_ff_ff),
+                PaletteEntry::solid(0),
             ],
         }
     }
@@ -797,9 +809,53 @@ fn volume_frame(input: VisualizerInput) -> Vec<Rgb> {
     })
 }
 
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Spectrum chooses the radial gradient by truncating normalized volume times 8"
+)]
 fn radial_frame(input: VisualizerInput) -> Vec<Rgb> {
-    let offset = phase_offset(input.beat_progress);
-    preview_frame(|index| input.palette[((index + offset) / 89) % input.palette.len()])
+    let adjusted_level = f64::from(input.volume.clamp(0.0, 1.0))
+        .sqrt()
+        .clamp(0.1, 1.0);
+    let progress = if input.animation_frame == 0 {
+        0.0
+    } else {
+        input.beat_progress
+    };
+    let current_angle = wrap(progress * 0.25 * 0.25, 0.0, 1.0);
+    let current_gradient = wrap(progress * 0.25, 0.0, 1.0);
+    let which_gradient = (f64::from(input.volume.clamp(0.0, 1.0)) * 8.0) as usize;
+    let size_limit = adjusted_level;
+
+    DOME_LED_POINTS
+        .get_or_init(build_dome_led_points)
+        .iter()
+        .map(|point| {
+            let px = point.x * 2.0 - 1.0;
+            let py = point.y * 2.0 - 1.0;
+            let angle = map_wrap(
+                py.atan2(px),
+                -std::f64::consts::PI,
+                std::f64::consts::PI,
+                0.0,
+                1.0,
+            );
+            let dist = (px * px + py * py).sqrt();
+            let mut val = map_wrap(angle, current_angle, 1.0 + current_angle, 0.0, 1.0);
+            val = wrap(val, 0.0, 1.0);
+            val = (val * 2.0 - 1.0).abs();
+            if val <= size_limit {
+                input.palette_entries[which_gradient % input.palette_entries.len()].gradient_color(
+                    dist,
+                    current_gradient,
+                    true,
+                )
+            } else {
+                Rgb::BLACK
+            }
+        })
+        .collect()
 }
 
 #[allow(
@@ -1091,6 +1147,42 @@ fn max_axis_by_abs(x: f64, y: f64, z: f64) -> u8 {
     } else {
         2
     }
+}
+
+fn map_value(
+    value: f64,
+    source_start: f64,
+    source_end: f64,
+    target_start: f64,
+    target_end: f64,
+) -> f64 {
+    (value - source_start) * (target_end - target_start) / (source_end - source_start)
+        + target_start
+}
+
+fn map_wrap(
+    value: f64,
+    source_start: f64,
+    source_end: f64,
+    target_start: f64,
+    target_end: f64,
+) -> f64 {
+    wrap(
+        map_value(value, source_start, source_end, target_start, target_end),
+        target_start,
+        target_end,
+    )
+}
+
+fn wrap(mut value: f64, start: f64, end: f64) -> f64 {
+    let range = end - start;
+    while value < start {
+        value += range;
+    }
+    while value > end {
+        value -= range;
+    }
+    value
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1596,6 +1688,14 @@ mod tests {
         let palette = std::array::from_fn(|index| {
             config.color_palette.single_color(index, input.palette_slot)
         });
+        let palette_entries = std::array::from_fn(|index| {
+            config
+                .color_palette
+                .entry(domers_core::ColorPalette::absolute_index(
+                    index,
+                    input.palette_slot,
+                ))
+        });
         VisualizerInput {
             volume: input.volume,
             beat_progress: input.beat_progress,
@@ -1606,6 +1706,7 @@ mod tests {
             secondary: palette[1],
             accent: palette[2],
             palette,
+            palette_entries,
         }
     }
 
@@ -1797,7 +1898,7 @@ mod tests {
             (LiveVisualizer::TvStatic, 14_075_851_066_622_254_809),
             (LiveVisualizer::Volume, 15_270_928_452_629_649_531),
             (LiveVisualizer::Flash, 14_695_981_039_346_656_037),
-            (LiveVisualizer::Radial, 1_809_576_378_694_742_732),
+            (LiveVisualizer::Radial, 8_095_729_372_390_775_204),
             (LiveVisualizer::Splat, 12_459_070_695_921_506_308),
             (LiveVisualizer::Race, 6_816_113_448_421_016_324),
             (LiveVisualizer::Snakes, 2_228_629_276_110_457_077),
@@ -1829,6 +1930,9 @@ mod tests {
         custom.palette[4] = domers_core::Rgb::from_u24(0x44_55_66);
         custom.palette[5] = domers_core::Rgb::from_u24(0x77_88_99);
         custom.palette[6] = domers_core::Rgb::from_u24(0xaa_bb_cc);
+        custom.palette_entries[4] = domers_core::PaletteEntry::solid(0x44_55_66);
+        custom.palette_entries[5] = domers_core::PaletteEntry::solid(0x77_88_99);
+        custom.palette_entries[6] = domers_core::PaletteEntry::solid(0xaa_bb_cc);
 
         for visualizer in [
             LiveVisualizer::Volume,
