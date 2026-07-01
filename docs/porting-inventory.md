@@ -29,7 +29,7 @@ Selectable dome modes:
 Other live modes:
 
 - `LEDDomeFlashVisualizer`: MIDI flash overlay via priority-2 tie. Status: wired renderer with captured Spectrum hash for the deterministic fixture case.
-- `LEDStageDepthLevelVisualizer`: live stage mode, using `TracerLEDIndex` helper. Status: wired renderer with captured Spectrum hash.
+- `LEDStageDepthLevelVisualizer`: live stage mode, using `TracerLEDIndex` helper. Status: Rust renderer matches the captured Spectrum hash.
 
 ## Support
 

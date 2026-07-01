@@ -1,0 +1,12 @@
+---
+description: Keep documentation synchronized with code changes
+alwaysApply: true
+---
+
+# Documentation Updates
+
+When making code or behavior changes:
+
+- Update relevant docs in the same iteration, especially `README.md`, `docs/`, crate `README.md` files, fixtures, or operator-facing workflow notes.
+- If a change affects parity status, update `docs/parity-closure.md` and related visualizer/test documentation.
+- If no documentation change is needed, explicitly mention why in the final response.
