@@ -3,7 +3,7 @@
     "beat_measure_ms": 1000,
     "clock_base_ticks": 637134336000000000,
     "command": "DOMERS_VISUALIZER_CASES=fixtures/spectrum-csharp/visualizer_sequence_cases.json python3 tools/capture_spectrum_visualizer_frames.py",
-    "description": "Stateful multi-frame Spectrum visualizer sequences. Each case keeps one Spectrum visualizer instance alive across the whole input_sequence, driven by an injected deterministic clock (Spectrum.Base.DeterministicClock) that starts at clock_base_ticks and advances frame_delta_ticks per frame, with per-frame beat_progress injected via a synthetic beat_measure_ms measure. Frame hashes use the same FNV-1a scheme as the single-frame capture.",
+    "description": "Stateful multi-frame Spectrum visualizer sequences. Each case keeps one Spectrum visualizer instance alive across the whole input_sequence, driven by an injected deterministic clock (Spectrum.Base.DeterministicClock) that starts at clock_base_ticks and advances frame_delta_ticks per frame (a case may override the per-frame delta with its own top-level frame_delta_ticks so that time-throttled visualizers such as Snakes (~50ms) and StageDepthLevel (~1s) cross their gates within a short sequence), with per-frame beat_progress injected via a synthetic beat_measure_ms measure. A frame may also carry a \"midi\" array of synthetic Note events (index/value; value>0 note-on, value==0 note-off) delivered for that one frame via MidiInput.GetCommandsSinceLastTick so MIDI-driven visualizers (Flash) animate deterministically. Frame hashes use the same FNV-1a scheme as the single-frame capture.",
     "frame_delta_ticks": 100000,
     "hardware_required": false,
     "runner": "target/spectrum-visualizer-capture/SpectrumVisualizerCapture.csproj",
@@ -213,11 +213,17 @@
       "case": "dome_snakes_motion_default",
       "classification": "live",
       "expected": {
-        "frames": [],
+        "frames": [
+          "14695981039346656037",
+          "3377082443979724166",
+          "6185503527842416367",
+          "12490059342964246338"
+        ],
         "kind": "frame_sequence_hashes",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "14695981039346656037"
       },
+      "frame_delta_ticks": 600000,
       "input": {
         "beat_progress": 0.0,
         "diagnostic_state": 1,
@@ -260,9 +266,7 @@
           "volume": 0.7
         }
       ],
-      "known_unverified": [
-        "Sequence emitted no Spectrum output on every frame at frame_delta_ticks=100000: the visualizer's internal time throttle was not crossed within the sequence, or it requires input the headless harness does not yet supply (e.g. MIDI note state). Left pending until a cadence or input that produces motion is defined."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeSnakesVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeSnakesVisualizer.cs"
     },
@@ -270,10 +274,15 @@
       "case": "dome_splat_motion_default",
       "classification": "live",
       "expected": {
-        "frames": [],
+        "frames": [
+          "12459070695921506308",
+          "12459070695921506308",
+          "4342760908191944469",
+          "2432167953572049459"
+        ],
         "kind": "frame_sequence_hashes",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "12459070695921506308"
       },
       "input": {
         "beat_progress": 0.2,
@@ -522,11 +531,20 @@
       "case": "dome_flash_idle_and_active_placeholder",
       "classification": "live",
       "expected": {
-        "frames": [],
+        "frames": [
+          "14695981039346656037",
+          "1791913927848310853",
+          "1545726514079457283",
+          "3101182227100171377",
+          "8048468013736346812",
+          "3739254558504712517",
+          "1791913927848310853"
+        ],
         "kind": "frame_sequence_hashes",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "14695981039346656037"
       },
+      "frame_delta_ticks": 500000,
       "input": {
         "beat_progress": 0.0,
         "diagnostic_state": 1,
@@ -545,17 +563,67 @@
           "volume": 0.7
         },
         {
-          "beat_progress": 0.25,
+          "beat_progress": 0.1,
+          "diagnostic_state": 1,
+          "diagnostic_step": 4,
+          "flash_active": true,
+          "midi": [
+            {
+              "index": 0,
+              "value": 0.8
+            }
+          ],
+          "palette_slot": 0,
+          "volume": 0.7
+        },
+        {
+          "beat_progress": 0.2,
           "diagnostic_state": 1,
           "diagnostic_step": 4,
           "flash_active": true,
           "palette_slot": 0,
           "volume": 0.7
+        },
+        {
+          "beat_progress": 0.3,
+          "diagnostic_state": 1,
+          "diagnostic_step": 4,
+          "flash_active": true,
+          "palette_slot": 0,
+          "volume": 0.7
+        },
+        {
+          "beat_progress": 0.4,
+          "diagnostic_state": 1,
+          "diagnostic_step": 4,
+          "flash_active": true,
+          "palette_slot": 0,
+          "volume": 0.7
+        },
+        {
+          "beat_progress": 0.5,
+          "diagnostic_state": 1,
+          "diagnostic_step": 4,
+          "flash_active": false,
+          "midi": [
+            {
+              "index": 0,
+              "value": 0.0
+            }
+          ],
+          "palette_slot": 0,
+          "volume": 0.7
+        },
+        {
+          "beat_progress": 0.6,
+          "diagnostic_state": 1,
+          "diagnostic_step": 4,
+          "flash_active": false,
+          "palette_slot": 0,
+          "volume": 0.7
         }
       ],
-      "known_unverified": [
-        "Sequence emitted no Spectrum output on every frame at frame_delta_ticks=100000: the visualizer's internal time throttle was not crossed within the sequence, or it requires input the headless harness does not yet supply (e.g. MIDI note state). Left pending until a cadence or input that produces motion is defined."
-      ],
+      "known_unverified": [],
       "name": "LEDDomeFlashVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDDomeFlashVisualizer.cs"
     },
@@ -563,11 +631,16 @@
       "case": "stage_depth_level_motion_default",
       "classification": "live",
       "expected": {
-        "frames": [],
+        "frames": [
+          "14695981039346656037",
+          "4998601498440685722",
+          "4246760167068951367"
+        ],
         "kind": "frame_sequence_hashes",
-        "status": "pending_csharp_execution",
-        "value": null
+        "status": "captured",
+        "value": "14695981039346656037"
       },
+      "frame_delta_ticks": 11000000,
       "input": {
         "beat_progress": 0.0,
         "diagnostic_state": 1,
@@ -602,9 +675,7 @@
           "volume": 0.9
         }
       ],
-      "known_unverified": [
-        "Sequence emitted no Spectrum output on every frame at frame_delta_ticks=100000: the visualizer's internal time throttle was not crossed within the sequence, or it requires input the headless harness does not yet supply (e.g. MIDI note state). Left pending until a cadence or input that produces motion is defined."
-      ],
+      "known_unverified": [],
       "name": "LEDStageDepthLevelVisualizer",
       "source": "spectrum/Spectrum/Visualizers/LEDStageDepthLevelVisualizer.cs"
     }

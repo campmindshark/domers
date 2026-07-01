@@ -148,6 +148,45 @@ static object CreateVisualizer(string name, SpectrumConfiguration config, AudioI
     ?? throw new Exception($"Could not instantiate {name}");
 }
 
+// Parse an optional per-frame "midi" array of synthetic MIDI Note events:
+//   "midi": [ { "index": 0, "value": 0.8 }, ... ]
+// value > 0 is a note-on with that velocity; value == 0 is a note-off. These
+// are delivered to the visualizer for exactly one frame via
+// MidiInput.GetCommandsSinceLastTick (see InjectMidi), mirroring how the live
+// operator loop drains one tick of device messages per Visualize call.
+static List<MidiNote> ParseMidiNotes(JsonElement frame) {
+  var notes = new List<MidiNote>();
+  if (frame.TryGetProperty("midi", out var midiArray) && midiArray.ValueKind == JsonValueKind.Array) {
+    foreach (var note in midiArray.EnumerateArray()) {
+      notes.Add(new MidiNote(
+        note.GetProperty("index").GetInt32(),
+        note.GetProperty("value").GetDouble()
+      ));
+    }
+  }
+  return notes;
+}
+
+static readonly FieldInfo midiCommandsField =
+  typeof(MidiInput).GetField("commandsSinceLastTick", BindingFlags.Instance | BindingFlags.NonPublic)
+    ?? throw new Exception("MidiInput.commandsSinceLastTick field missing");
+
+// Present the given synthetic Note commands to the visualizer for the current
+// frame. GetCommandsSinceLastTick returns exactly this array, so a visualizer
+// (e.g. LEDDomeFlashVisualizer) sees a deterministic one-tick burst of MIDI.
+static void InjectMidi(MidiInput midi, List<MidiNote> notes) {
+  var commands = new MidiCommand[notes.Count];
+  for (int i = 0; i < notes.Count; i++) {
+    commands[i] = new MidiCommand {
+      deviceIndex = 0,
+      type = MidiCommandType.Note,
+      index = notes[i].Index,
+      value = notes[i].Value,
+    };
+  }
+  midiCommandsField.SetValue(midi, commands);
+}
+
 static void SeedRandomFields(object visualizer) {
   foreach (var field in visualizer.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)) {
     if (field.FieldType == typeof(Random)) {
@@ -347,7 +386,7 @@ static List<string> CaptureSingleFrame(SpectrumConfiguration config, CaptureCase
 // call per entry, hashed with the same scheme as the single-frame capture.
 static List<string> CaptureSequence(SpectrumConfiguration config, CaptureCase testCase) {
   ConfigureCase(config, testCase);
-  long delta = FrameDeltaTicks();
+  long delta = testCase.FrameDeltaTicks;
   // Pin the clock before constructing anything so construction-time timestamps
   // (Snakes lastUpdate, Stopwatch starts, Flash animation anchors) are stable.
   DeterministicClock.OverrideTicks = clockBaseTicks;
@@ -372,6 +411,7 @@ static List<string> CaptureSequence(SpectrumConfiguration config, CaptureCase te
       InjectBeat(config, nowTicks, input.BeatProgress);
       SetAudioVolume(audio, input.Volume);
       config.colorPaletteIndex = input.PaletteSlot;
+      InjectMidi(midi, input.MidiNotes);
       ((Visualizer)visualizer).Visualize();
       values.Add(HashVisualizerOutput(config, visualizer, testCase).ToString());
       frameIndex++;
@@ -633,9 +673,15 @@ def update_manifest(capture: dict[str, object]) -> int:
                 "Stateful multi-frame Spectrum visualizer sequences. Each case keeps one "
                 "Spectrum visualizer instance alive across the whole input_sequence, driven "
                 "by an injected deterministic clock (Spectrum.Base.DeterministicClock) that "
-                "starts at clock_base_ticks and advances frame_delta_ticks per frame, with "
-                "per-frame beat_progress injected via a synthetic beat_measure_ms measure. "
-                "Frame hashes use the same FNV-1a scheme as the single-frame capture."
+                "starts at clock_base_ticks and advances frame_delta_ticks per frame (a case "
+                "may override the per-frame delta with its own top-level frame_delta_ticks so "
+                "that time-throttled visualizers such as Snakes (~50ms) and StageDepthLevel "
+                "(~1s) cross their gates within a short sequence), with per-frame beat_progress "
+                "injected via a synthetic beat_measure_ms measure. A frame may also carry a "
+                "\"midi\" array of synthetic Note events (index/value; value>0 note-on, value==0 "
+                "note-off) delivered for that one frame via MidiInput.GetCommandsSinceLastTick "
+                "so MIDI-driven visualizers (Flash) animate deterministically. Frame hashes use "
+                "the same FNV-1a scheme as the single-frame capture."
             ),
         }
     else:
