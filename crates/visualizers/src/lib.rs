@@ -912,13 +912,13 @@ fn volume_commands(input: VisualizerInput) -> Vec<DomeCommand> {
     let beat_progress = if input.animation_frame == 0 {
         0.0
     } else {
-        runtime_visualizer_progress(input, 600)
+        input.beat_progress
     };
-    let layouts = volume_layouts(volume_center_offset(input, beat_progress));
+    let layouts = volume_layouts(volume_center_offset(beat_progress));
     let total_parts = VOLUME_ANIMATION_SIZE;
     let volume_split_into = 2 * ((total_parts - 1) / 2 + 1);
     let level = f64::from(input.volume.clamp(0.0, 1.0));
-    let gradient_focus = progress_through_beat(beat_progress, VOLUME_GRADIENT_SPEED);
+    let gradient_focus = beat_progress;
     let mut commands = if input.animation_frame == 0 {
         volume_wipe_commands()
     } else {
@@ -1092,20 +1092,8 @@ fn volume_color_from_part(
     clippy::cast_sign_loss,
     reason = "Spectrum truncates ProgressThroughBeat times four to choose the volume center"
 )]
-fn volume_center_offset(input: VisualizerInput, beat_progress: f64) -> usize {
-    if input.animation_frame > 0 {
-        return usize::try_from((input.animation_frame / 20) % 4)
-            .expect("runtime volume center offset fits in usize");
-    }
-    (progress_through_beat(beat_progress, VOLUME_ROTATION_SPEED) * 4.0) as usize
-}
-
-fn progress_through_beat(beat_progress: f64, factor: f64) -> f64 {
-    if factor == 0.0 {
-        0.0
-    } else {
-        wrap(beat_progress * factor, 0.0, 1.0)
-    }
+fn volume_center_offset(beat_progress: f64) -> usize {
+    (beat_progress * 4.0) as usize
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1492,10 +1480,10 @@ fn radial_frame(input: VisualizerInput) -> Vec<Rgb> {
     let progress = if input.animation_frame == 0 {
         0.0
     } else {
-        runtime_visualizer_progress(input, 600)
+        runtime_visualizer_progress_unwrapped(input, 200)
     };
-    let current_angle = wrap(progress * 0.25 * 0.25, 0.0, 1.0);
-    let current_gradient = wrap(progress * 0.25, 0.0, 1.0);
+    let current_angle = wrap(progress * VOLUME_ROTATION_SPEED * 0.25, 0.0, 1.0);
+    let current_gradient = wrap(progress * VOLUME_GRADIENT_SPEED, 0.0, 1.0);
     let which_gradient = (f64::from(input.volume.clamp(0.0, 1.0)) * 8.0) as usize;
     let size_limit = adjusted_level;
 
@@ -2014,6 +2002,17 @@ fn runtime_visualizer_progress(input: VisualizerInput, period_frames: u64) -> f6
     }
     let frame = input.animation_frame % period_frames;
     (input.beat_progress + frame as f64 / period_frames as f64).rem_euclid(1.0)
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "Runtime visualizer animation uses small preview-frame counters"
+)]
+fn runtime_visualizer_progress_unwrapped(input: VisualizerInput, frames_per_cycle: u64) -> f64 {
+    if input.animation_frame == 0 || frames_per_cycle == 0 {
+        return 0.0;
+    }
+    input.animation_frame as f64 / frames_per_cycle as f64
 }
 
 fn runtime_angle_offset(input: VisualizerInput, period_frames: u64) -> f64 {
@@ -2718,7 +2717,6 @@ mod tests {
     fn runtime_visualizers_animate_after_captured_first_frame() {
         for visualizer in [
             LiveVisualizer::TvStatic,
-            LiveVisualizer::Volume,
             LiveVisualizer::Radial,
             LiveVisualizer::Splat,
             LiveVisualizer::Race,
@@ -2745,6 +2743,31 @@ mod tests {
                 "{visualizer:?} should animate during live preview"
             );
         }
+    }
+
+    #[test]
+    fn volume_animation_uses_beat_progress_like_spectrum() {
+        let first_runtime = render_dome_visualizer(
+            LiveVisualizer::Volume,
+            VisualizerInput {
+                animation_frame: 1,
+                beat_progress: 0.10,
+                ..VisualizerInput::default()
+            },
+        );
+        let later_runtime = render_dome_visualizer(
+            LiveVisualizer::Volume,
+            VisualizerInput {
+                animation_frame: 120,
+                beat_progress: 0.65,
+                ..VisualizerInput::default()
+            },
+        );
+        assert_ne!(
+            super::frame_hash(&first_runtime),
+            super::frame_hash(&later_runtime),
+            "Volume should follow beat progress instead of a synthetic rotating shape"
+        );
     }
 
     #[test]

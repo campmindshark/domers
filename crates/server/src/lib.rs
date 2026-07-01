@@ -1051,7 +1051,7 @@ impl ServerState {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct InputRuntime {
     volume: Option<f32>,
     beat: BeatBroadcaster,
@@ -1068,6 +1068,30 @@ struct InputRuntime {
     orientation_adapter: InputAdapterStatus,
     madmom_adapter: InputAdapterStatus,
     link_adapter: InputAdapterStatus,
+}
+
+impl Default for InputRuntime {
+    fn default() -> Self {
+        let mut beat = BeatBroadcaster::default();
+        let _ = beat.set_bpm(120.0, 0);
+        Self {
+            volume: None,
+            beat,
+            taps: 0,
+            madmom_beats: 0,
+            midi_commands: 0,
+            midi_log: VecDeque::new(),
+            midi_level_drivers: [None; MIDI_LEVEL_DRIVER_CHANNELS],
+            last_level_driver_interaction_ms: 0,
+            last_orientation: None,
+            orientation: OrientationInputState::default(),
+            audio_adapter: InputAdapterStatus::default(),
+            midi_adapter: InputAdapterStatus::default(),
+            orientation_adapter: InputAdapterStatus::default(),
+            madmom_adapter: InputAdapterStatus::default(),
+            link_adapter: InputAdapterStatus::default(),
+        }
+    }
 }
 
 const MIDI_LEVEL_DRIVER_CHANNELS: usize = 8;
@@ -3009,7 +3033,7 @@ mod tests {
     }
 
     #[test]
-    fn no_tempo_preview_does_not_animate_beat_or_volume() {
+    fn default_tempo_preview_animates_beat_but_not_volume() {
         let mut state = ServerState::default();
         state.start();
 
@@ -3019,7 +3043,8 @@ mod tests {
         state.set_now_ms_for_test(4_000);
         let second = state.visualizer_controls();
 
-        assert!((first.beat_progress - second.beat_progress).abs() < f64::EPSILON);
+        assert_eq!(state.snapshot().inputs.beat_ms, Some(500));
+        assert!((first.beat_progress - second.beat_progress).abs() > 0.01);
         assert!((first.volume - second.volume).abs() < f32::EPSILON);
     }
 
