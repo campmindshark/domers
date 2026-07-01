@@ -39,10 +39,10 @@ use domers_outputs::{
     OpcAddress, OpcClient, PersistentChannel, StageCommand,
 };
 use domers_visualizers::{
-    render_bar_diagnostic, render_dome_diagnostic, render_dome_visualizer, render_stage_visualizer,
+    render_bar_diagnostic, render_dome_diagnostic, render_stage_visualizer,
     render_stage_visualizer_with_input, BarDiagnosticVisualizer, DiagnosticInput,
     DomeDiagnosticVisualizer, LiveVisualizer, OrientationOverride, StageVisualizer,
-    StageVisualizerInput, VisualizerInput,
+    StageVisualizerInput, VisualizerInput, VisualizerRuntime,
 };
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native-capture")]
@@ -61,6 +61,10 @@ pub const ENGINE_FRAME_INTERVAL: Duration = Duration::from_micros(2_500);
 
 /// Emit simulator frames every 10 ms, matching Spectrum's WPF simulator timer.
 pub const SIMULATOR_FRAME_STRIDE: u64 = 4;
+
+/// Synthetic wall-clock advance per sandbox preview frame, matching the 10 ms
+/// simulator cadence so stateful visualizers step at Spectrum's real rate.
+const SANDBOX_PREVIEW_FRAME_MS: u64 = 10;
 
 const DOME_CONTROL_BOX_PIXEL_COUNT: usize = 214 * 8;
 
@@ -390,7 +394,13 @@ impl Default for SimulatorControls {
 }
 
 impl SimulatorControls {
-    fn visualizer_input(self, config: &EngineConfig, animation_frame: u64) -> VisualizerInput {
+    fn visualizer_input(
+        self,
+        config: &EngineConfig,
+        animation_frame: u64,
+        now_ms: u64,
+        measure_length_ms: Option<u32>,
+    ) -> VisualizerInput {
         let palette = std::array::from_fn(|index| {
             config
                 .color_palette
@@ -408,6 +418,8 @@ impl SimulatorControls {
             volume: self.volume,
             beat_progress: self.beat_progress,
             animation_frame,
+            now_ms,
+            measure_length_ms,
             orientation_override: self.orientation_override(),
             flash_active: self.flash_active,
             primary: palette[0],
@@ -438,6 +450,8 @@ pub struct ServerState {
     metrics: Metrics,
     running: bool,
     input_epoch: Instant,
+    visualizer_runtime: VisualizerRuntime,
+    sandbox_visualizer_runtime: VisualizerRuntime,
 }
 
 impl Default for ServerState {
@@ -468,6 +482,8 @@ impl ServerState {
             },
             running: false,
             input_epoch: Instant::now(),
+            visualizer_runtime: VisualizerRuntime::default(),
+            sandbox_visualizer_runtime: VisualizerRuntime::default(),
         }
     }
 
@@ -855,20 +871,27 @@ impl ServerState {
     }
 
     /// Produce one scheduled operator frame for all outputs.
-    #[must_use]
-    pub fn operator_frame(&self) -> OperatorCommandFrame {
-        self.operator_frame_with_visualizer_frame(self.visualizer_frame_index())
+    pub fn operator_frame(&mut self) -> OperatorCommandFrame {
+        let visualizer_frame_index = self.visualizer_frame_index();
+        self.operator_frame_with_visualizer_frame(visualizer_frame_index)
     }
 
     fn operator_frame_with_visualizer_frame(
-        &self,
+        &mut self,
         visualizer_frame_index: u64,
     ) -> OperatorCommandFrame {
+        let simulator = self.visualizer_controls();
+        let diagnostic_frame_index = self.metrics.frames;
+        let now_ms = self.now_ms();
+        let measure_length_ms = self.measure_length_ms();
         render_operator_frame(
             &self.config,
-            self.visualizer_controls(),
-            self.metrics.frames,
+            simulator,
+            diagnostic_frame_index,
             visualizer_frame_index,
+            now_ms,
+            measure_length_ms,
+            &mut self.visualizer_runtime,
         )
     }
 
@@ -918,6 +941,19 @@ impl ServerState {
 
     fn prune_input_state(&mut self) {
         self.inputs.orientation.remove_stale_devices(self.now_ms());
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss,
+        reason = "Measure length derives from a bounded beat interval and stays within u32"
+    )]
+    fn measure_length_ms(&self) -> Option<u32> {
+        self.inputs
+            .beat
+            .beat_ms()
+            .map(|beat_ms| (beat_ms as f64 / MEASURE_PROGRESS_FACTOR) as u32)
     }
 
     fn visualizer_controls(&self) -> SimulatorControls {
@@ -1429,15 +1465,20 @@ impl AppRuntime {
         &self,
         request: SimulatorSandboxRequest,
     ) -> SimulatorFrame {
-        let state = self.state.lock().await;
+        let mut state = self.state.lock().await;
         let mut config = state.full_config();
         request.apply_to_config(&mut config);
         let visualizer_frame_index = self.sandbox_frame_index.fetch_add(1, Ordering::Relaxed);
+        let diagnostic_frame_index = state.metrics.frames;
+        let now_ms = visualizer_frame_index.saturating_mul(SANDBOX_PREVIEW_FRAME_MS);
         let frame = render_operator_frame(
             &config,
             request.simulator_controls(),
-            state.metrics.frames,
+            diagnostic_frame_index,
             visualizer_frame_index,
+            now_ms,
+            None,
+            &mut state.sandbox_visualizer_runtime,
         );
         SimulatorFrame {
             metrics: state.metrics(),
@@ -2652,12 +2693,16 @@ fn render_operator_frame(
     simulator: SimulatorControls,
     diagnostic_frame_index: u64,
     visualizer_frame_index: u64,
+    now_ms: u64,
+    measure_length_ms: Option<u32>,
+    runtime: &mut VisualizerRuntime,
 ) -> OperatorCommandFrame {
     let engine = EngineConfig::from(config);
     let inputs = input_specs(simulator);
     let outputs = output_specs(config);
     let schedule = schedule_operator_frame(&inputs, &outputs);
-    let visualizer_input = simulator.visualizer_input(&engine, visualizer_frame_index);
+    let visualizer_input =
+        simulator.visualizer_input(&engine, visualizer_frame_index, now_ms, measure_length_ms);
     let diagnostic_input = DiagnosticInput {
         state: diagnostic_state(diagnostic_frame_index),
         step: diagnostic_step(diagnostic_frame_index),
@@ -2679,6 +2724,7 @@ fn render_operator_frame(
             config,
             diagnostic_input,
             visualizer_input,
+            runtime,
             &mut frame,
         );
     }
@@ -2702,6 +2748,22 @@ fn diagnostic_step(frame_index: u64) -> usize {
     (frame_index / 4) as usize
 }
 
+fn live_visualizer_from_name(name: &str) -> Option<LiveVisualizer> {
+    Some(match name {
+        "LEDDomeVolumeVisualizer" => LiveVisualizer::Volume,
+        "LEDDomeRadialVisualizer" => LiveVisualizer::Radial,
+        "LEDDomeRaceVisualizer" => LiveVisualizer::Race,
+        "LEDDomeSnakesVisualizer" => LiveVisualizer::Snakes,
+        "LEDDomeSplatVisualizer" => LiveVisualizer::Splat,
+        "LEDDomeQuaternionTestVisualizer" => LiveVisualizer::QuaternionTest,
+        "LEDDomeQuaternionMultiTestVisualizer" => LiveVisualizer::QuaternionMultiTest,
+        "LEDDomeQuaternionPaintbrushVisualizer" => LiveVisualizer::QuaternionPaintbrush,
+        "LEDDomeFlashVisualizer" => LiveVisualizer::Flash,
+        "LEDDomeTVStaticVisualizer" => LiveVisualizer::TvStatic,
+        _ => return None,
+    })
+}
+
 #[allow(
     clippy::too_many_lines,
     reason = "This dispatch table keeps Spectrum visualizer names explicit at the runtime boundary"
@@ -2711,49 +2773,16 @@ fn render_scheduled_visualizer(
     config: &DomersConfig,
     diagnostic_input: DiagnosticInput,
     visualizer_input: VisualizerInput,
+    runtime: &mut VisualizerRuntime,
     frame: &mut OperatorCommandFrame,
 ) {
+    if let Some(live) = live_visualizer_from_name(visualizer) {
+        frame
+            .dome
+            .extend(runtime.render_dome(live, visualizer_input));
+        return;
+    }
     match visualizer {
-        "LEDDomeVolumeVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::Volume,
-            visualizer_input,
-        )),
-        "LEDDomeRadialVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::Radial,
-            visualizer_input,
-        )),
-        "LEDDomeRaceVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::Race,
-            visualizer_input,
-        )),
-        "LEDDomeSnakesVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::Snakes,
-            visualizer_input,
-        )),
-        "LEDDomeSplatVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::Splat,
-            visualizer_input,
-        )),
-        "LEDDomeQuaternionTestVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::QuaternionTest,
-            visualizer_input,
-        )),
-        "LEDDomeQuaternionMultiTestVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::QuaternionMultiTest,
-            visualizer_input,
-        )),
-        "LEDDomeQuaternionPaintbrushVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::QuaternionPaintbrush,
-            visualizer_input,
-        )),
-        "LEDDomeFlashVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::Flash,
-            visualizer_input,
-        )),
-        "LEDDomeTVStaticVisualizer" => frame.dome.extend(render_dome_visualizer(
-            LiveVisualizer::TvStatic,
-            visualizer_input,
-        )),
         "LEDDomeFlashColorsDiagnosticVisualizer" => frame.dome.extend(render_dome_diagnostic(
             DomeDiagnosticVisualizer::FlashColors,
             diagnostic_input,
@@ -3251,7 +3280,7 @@ mod tests {
     fn active_visualizer_index_eight_selects_tv_static() {
         let mut config = DomersConfig::default();
         config.dome.active_visualizer = 8;
-        let state = ServerState::new(config);
+        let mut state = ServerState::new(config);
 
         let frame = state.operator_frame();
 
@@ -3262,7 +3291,7 @@ mod tests {
     fn operator_frame_diagnostics_override_active_dome_visualizer() {
         let mut config = DomersConfig::default();
         config.dome.test_pattern = 2;
-        let state = ServerState::new(config);
+        let mut state = ServerState::new(config);
 
         let frame = state.operator_frame();
 

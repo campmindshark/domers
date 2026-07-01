@@ -195,6 +195,10 @@ pub struct VisualizerInput {
     pub beat_progress: f64,
     /// Runtime frame index for visualizers with Spectrum-style internal motion.
     pub animation_frame: u64,
+    /// Monotonic wall-clock time in milliseconds for stateful runtime stepping.
+    pub now_ms: u64,
+    /// Current measure length in milliseconds when a tempo is known.
+    pub measure_length_ms: Option<u32>,
     /// Optional yaw/pitch/roll override for simulator-driven orientation previews.
     pub orientation_override: Option<OrientationOverride>,
     /// Whether a MIDI flash note is active.
@@ -220,6 +224,8 @@ impl Default for VisualizerInput {
             volume: 0.5,
             beat_progress: 0.25,
             animation_frame: 0,
+            now_ms: 0,
+            measure_length_ms: None,
             orientation_override: None,
             flash_active: true,
             primary,
@@ -320,6 +326,94 @@ pub fn render_dome_visualizer(
     });
     sink.flush();
     sink.drain_commands()
+}
+
+/// Persistent per-visualizer runtime driving the live and sandbox render loops.
+///
+/// Unlike [`render_dome_visualizer`], which recomputes each frame from
+/// [`VisualizerInput::animation_frame`] for deterministic golden tests, this
+/// runtime keeps long-lived per-visualizer state (Spectrum-style instance
+/// fields) and advances it using wall-clock deltas from
+/// [`VisualizerInput::now_ms`]. Switching visualizers resets that state and
+/// emits a full black frame so residual pixels from the previous visualizer are
+/// cleared on both the hardware channel and the browser preview.
+#[derive(Clone, Debug, Default)]
+pub struct VisualizerRuntime {
+    active: Option<LiveVisualizer>,
+    snakes: Option<SnakesRuntime>,
+}
+
+impl VisualizerRuntime {
+    /// Render the dome commands for `visualizer`, advancing persistent state.
+    #[must_use]
+    pub fn render_dome(
+        &mut self,
+        visualizer: LiveVisualizer,
+        input: VisualizerInput,
+    ) -> Vec<DomeCommand> {
+        let switched = self.active != Some(visualizer);
+        // Only wipe when replacing a *previous* visualizer; the very first
+        // activation has nothing on the dome to clear and must stay bit-for-bit
+        // identical to the pure first-frame path used by golden tests.
+        let wipe = switched && self.active.is_some();
+        if switched {
+            self.reset();
+            self.active = Some(visualizer);
+        }
+
+        let mut commands = Vec::new();
+        if wipe {
+            commands.push(DomeCommand::Frame(vec![Rgb::BLACK; DOME_PIXELS]));
+        }
+
+        match visualizer {
+            LiveVisualizer::Snakes => {
+                let runtime = self.snakes.get_or_insert_with(SnakesRuntime::new);
+                runtime.render(&input, &mut commands);
+            }
+            other => commands.extend(render_dome_visualizer(other, input)),
+        }
+
+        commands
+    }
+
+    /// Drop all persistent per-visualizer state (invoked on visualizer switch).
+    fn reset(&mut self) {
+        self.snakes = None;
+    }
+}
+
+/// Wall-clock throttled Snakes runtime wrapping the stateful step machine.
+#[derive(Clone, Debug)]
+struct SnakesRuntime {
+    state: SnakesState,
+    last_step_ms: Option<u64>,
+}
+
+impl SnakesRuntime {
+    fn new() -> Self {
+        Self {
+            state: SnakesState::new(),
+            last_step_ms: None,
+        }
+    }
+
+    fn render(&mut self, input: &VisualizerInput, out: &mut Vec<DomeCommand>) {
+        let now = input.now_ms;
+        let steps = match self.last_step_ms {
+            None => 1,
+            Some(last) => u32::try_from(now.saturating_sub(last) / SNAKES_STEP_MS)
+                .unwrap_or(SNAKES_MAX_CATCHUP_STEPS)
+                .min(SNAKES_MAX_CATCHUP_STEPS),
+        };
+        if steps == 0 {
+            return;
+        }
+        for _ in 0..steps {
+            self.state.step(&input.palette, out);
+        }
+        self.last_step_ms = Some(now);
+    }
 }
 
 /// Render one used dome diagnostic visualizer frame.
@@ -495,6 +589,7 @@ impl DotNetRandom {
 
     #[allow(
         clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
         reason = "Spectrum .NET Random.Next(min,max) truncates Sample()*range to an int"
     )]
     fn next_int(&mut self, min_value: i32, max_value: i32) -> i32 {
@@ -1729,6 +1824,10 @@ const SNAKE_LENGTH: usize = 7;
 const SNAKES_COLOR_PALETTE_COUNT: i32 = 8;
 /// Preview frames per Spectrum 50 ms Snakes throttle step (10 ms preview cadence).
 const SNAKES_STEP_FRAMES: u64 = 5;
+/// Spectrum Snakes wall-clock throttle interval in milliseconds.
+const SNAKES_STEP_MS: u64 = 50;
+/// Upper bound on Snakes catch-up steps per render to avoid runaway after stalls.
+const SNAKES_MAX_CATCHUP_STEPS: u32 = 8;
 
 /// One dome triangle: three clockwise struts plus directional neighbors, ported
 /// from Spectrum's `TriangleSegmentFactory`.
@@ -1748,7 +1847,7 @@ fn snake_triangles() -> &'static [TriangleSeg] {
     SNAKE_TRIANGLES.get_or_init(build_snake_triangles)
 }
 
-/// (first, second, third, points_up) in Spectrum `LoadSegments` order.
+/// (first, second, third, `points_up`) in Spectrum `LoadSegments` order.
 const SNAKE_TRIANGLE_DEFS: &[(usize, usize, usize, bool)] = &[
     // Layer 1
     (72, 71, 0, true),
@@ -1938,6 +2037,7 @@ fn snake_add_triangle(
 }
 
 /// Persistent Snakes state mirroring the Spectrum visualizer instance fields.
+#[derive(Clone, Debug)]
 struct SnakesState {
     rng: DotNetRandom,
     snakes: [VecDeque<usize>; 2],
@@ -2970,6 +3070,8 @@ mod tests {
             volume: input.volume,
             beat_progress: input.beat_progress,
             animation_frame: 0,
+            now_ms: 0,
+            measure_length_ms: None,
             orientation_override: None,
             flash_active: input.flash_active,
             primary: palette[0],
