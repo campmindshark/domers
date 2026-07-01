@@ -4,14 +4,12 @@ Hardware validation gates release tags. Complete this checklist after the automa
 
 ## Preflight
 
-- Confirm `cargo test --workspace` passes.
-- Confirm `cargo clippy --workspace --all-targets -- -D warnings` passes.
-- Confirm UI smoke check passes.
+- Confirm `make e2e` passes.
 - Confirm `no_hardware_server_migration_and_simulator_smoke` passes.
 - Confirm `hardware_outputs_send_mapped_dome_frame_to_loopback_opc` passes.
 - Confirm `hardware_outputs_reconnect_after_loopback_opc_returns` passes.
 - Confirm `runtime_udp_input_adapters_feed_live_state` passes.
-- Confirm `domers doctor --config domers.toml --bind 127.0.0.1:3000` passes with the hardware config.
+- Confirm `make doctor CONFIG=domers.toml BIND=127.0.0.1:3000` passes with the hardware config.
 - Record commit SHA, operator laptop OS, and fixture capture date.
 
 ## Dome

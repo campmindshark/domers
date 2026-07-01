@@ -17,7 +17,7 @@
 - Native TOML configuration with a Spectrum XML import command and shared-entry palette format.
 - Core input support for MIDI/audio UDP adapters, optional macOS/Linux native capture, orientation datagram ingestion, tap tempo, and Madmom `BEAT:{seconds}` protocol parsing.
 - Managed Madmom sidecar lifecycle using `DBNBeatTracker --host_api --audio_input=<index> online`.
-- Ableton Link / Carabiner-compatible sidecar tempo sync and Spectrum ADSR MIDI level drivers.
+- DJ Link / Carabiner-compatible sidecar tempo sync and Spectrum ADSR MIDI level drivers.
 
 ## Quick Start
 

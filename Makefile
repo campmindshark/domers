@@ -1,4 +1,4 @@
-.PHONY: help deps deps-check build build-backend build-backend-release build-ui run run-release doctor import test test-backend test-ui lint lint-backend lint-ui fmt check clean
+.PHONY: help deps deps-check build build-backend build-backend-release build-ui run run-release doctor import test test-backend test-ui test-parity lint lint-backend lint-ui fmt check e2e clean
 
 CONFIG ?= examples/domers.toml
 BIND ?= 127.0.0.1:3000
@@ -31,11 +31,13 @@ help:
 	@echo "  make test                    Run backend and UI tests/checks"
 	@echo "  make test-backend            Run Cargo workspace tests"
 	@echo "  make test-ui                 Run UI typecheck and smoke check"
+	@echo "  make test-parity             Run Spectrum visualizer parity gates"
 	@echo "  make lint                    Run Rust fmt/clippy and UI checks"
 	@echo "  make lint-backend            Run cargo fmt check and clippy"
 	@echo "  make lint-ui                 Run UI typecheck and smoke check"
 	@echo "  make fmt                     Format Rust code"
 	@echo "  make check                   Run build, test, and lint"
+	@echo "  make e2e                     Run full local/CI gate including parity"
 	@echo ""
 	@echo "Variables:"
 	@echo "  CONFIG=$(CONFIG)"
@@ -83,6 +85,10 @@ test-backend:
 test-ui: build-ui
 	cd ui && bun run check && bun run smoke
 
+test-parity:
+	python3 tools/check_visualizer_goldens.py
+	cargo test -p domers-visualizers rust_visualizer_hashes_match_spectrum_csharp_goldens -- --ignored --nocapture
+
 lint: lint-backend lint-ui
 
 lint-backend:
@@ -96,6 +102,8 @@ fmt:
 	cargo fmt --all
 
 check: build test lint
+
+e2e: check test-parity
 
 clean:
 	cargo clean

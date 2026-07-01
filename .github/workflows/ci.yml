@@ -9,30 +9,17 @@ permissions:
   contents: read
 
 jobs:
-  rust-fast:
+  e2e:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - uses: oven-sh/setup-bun@v2
       - uses: Swatinem/rust-cache@v2
-      - name: Format
-        run: cargo fmt --all -- --check
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test
-        run: cargo test --workspace
-
-  docs-and-ui-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: UI smoke
-        run: node ui/check.mjs
+      - name: Full e2e gate
+        run: make e2e
 
   docker-loopback-placeholder:
     runs-on: ubuntu-latest
