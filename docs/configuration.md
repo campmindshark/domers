@@ -37,7 +37,7 @@ test_pattern = 1
 
 [stage]
 enabled = false
-simulation_enabled = false
+simulation_enabled = true
 opc_address = "127.0.0.1:7890"
 side_lengths = [18, 19, 19]
 brightness = 0.834591194968554
@@ -320,11 +320,11 @@ BEAT:12.345
 
 Bundling Madmom is a release packaging choice, not a runtime path assumption. A packaged `dome-rs` build needs either a working Madmom distribution or a documented one-command installer so operators do not have to assemble the beat tracker by hand.
 
-## Ableton Link / Carabiner Config
+## DJ Link / Carabiner Config
 
-Ableton Link sync is enabled with `tempo.source = "link"`. `domers run` starts
+DJ Link sync is enabled with `tempo.source = "link"`. `domers run` starts
 the configured macOS/Linux sidecar command and reads tempo lines from stdout.
-The sidecar can be a Carabiner-compatible bridge or a native Link bridge.
+The sidecar can be a Carabiner-compatible bridge or a native DJ Link bridge.
 
 ```toml
 [tempo]

@@ -19,7 +19,7 @@ test_pattern = 1
 
 [stage]
 enabled = false
-simulation_enabled = false
+simulation_enabled = true
 opc_address = "127.0.0.1:7890"
 side_lengths = [
     18,

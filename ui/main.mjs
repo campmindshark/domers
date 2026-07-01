@@ -60,6 +60,7 @@ const inputMadmom = document.querySelector('#input-madmom');
 const inputLink = document.querySelector('#input-link');
 const orientationDevices = document.querySelector('#orientation-devices');
 const midiLog = document.querySelector('#midi-log');
+const manualBpm = document.querySelector('#manual-bpm');
 const tempoBpm = document.querySelector('#tempo-bpm');
 const tapCounter = document.querySelector('#tap-counter');
 const sandboxActiveVisualizer = document.querySelector('#sandbox-dome-active-vis');
@@ -94,6 +95,8 @@ const SPECTRUM_PROJECTION_OFFSET = 10;
 const SPECTRUM_PROJECTION_SPAN = 690;
 let domeLayout;
 let domeLedPoints = [];
+let domeLedStrutOffsets = [];
+let domeFrameColors = [];
 let latestSimulatorFrame;
 let pendingSimulatorFrame;
 let simulatorPaintQueued = false;
@@ -566,6 +569,9 @@ function updateInputStatus(inputs) {
   if (tempoBpm) {
     tempoBpm.textContent = inputs.bpm ?? '[none]';
   }
+  if (manualBpm && document.activeElement !== manualBpm) {
+    manualBpm.value = inputs.bpm && inputs.bpm !== '[none]' ? inputs.bpm : '';
+  }
   if (tapCounter) {
     tapCounter.textContent = inputs.tap_counter_text ?? 'Tap';
     tapCounter.dataset.active = String(Boolean(inputs.tap_counter_active));
@@ -734,6 +740,10 @@ function clearCanvas() {
   context.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+function resetDomeFrameColors() {
+  domeFrameColors = [];
+}
+
 function clearSupportCanvas(canvasElement, canvasContext) {
   if (!canvasElement || !canvasContext) {
     return;
@@ -743,25 +753,36 @@ function clearSupportCanvas(canvasElement, canvasContext) {
 }
 
 function drawFrame(colors) {
-  if (!context || !colors.length) {
+  if (!colors.length) {
     return;
   }
-  context.lineWidth = 1;
-
-  colors.forEach((color, index) => {
-    const point = domeLedPoints[index] ?? fallbackDomePoint(index, colors.length);
-    drawLed(point.x, point.y, color, point.size);
-  });
+  domeFrameColors = colors.slice();
 }
 
 function drawPixel(command) {
-  if (!context) {
+  const index = (domeLedStrutOffsets[command.strut_index] ?? 0) + command.led_index;
+  ensureDomeFrameColors(index + 1);
+  domeFrameColors[index] = command.color;
+}
+
+function ensureDomeFrameColors(length) {
+  if (domeFrameColors.length >= length) {
     return;
   }
+  const oldLength = domeFrameColors.length;
+  domeFrameColors.length = length;
+  domeFrameColors.fill(0, oldLength);
+}
 
-  const index = command.strut_index * 3 + command.led_index;
-  const point = domeLedPoints[index] ?? fallbackDomePoint(index, 190);
-  drawLed(point.x, point.y, command.color, point.size * 2);
+function drawDomeFrameBuffer() {
+  if (!context || !domeFrameColors.length) {
+    return;
+  }
+  context.lineWidth = 1;
+  domeFrameColors.forEach((color, index) => {
+    const point = domeLedPoints[index] ?? fallbackDomePoint(index, domeFrameColors.length);
+    drawLed(point.x, point.y, color, point.size);
+  });
 }
 
 function drawLed(x, y, color, radius) {
@@ -814,6 +835,16 @@ function buildDomeLedPoints(geometry, mapping) {
   return points;
 }
 
+function domeStrutLedOffsets(mapping) {
+  const ledCounts = domeStrutLedCounts(mapping);
+  let offset = 0;
+  return ledCounts.map(count => {
+    const strutOffset = offset;
+    offset += count;
+    return strutOffset;
+  });
+}
+
 function domeStrutLedCounts(mapping) {
   return mapping.strut_positions.map(position => {
     let strutsLeft = position.control_box_strut_index;
@@ -832,6 +863,7 @@ function rebuildDomeLedPoints() {
     return;
   }
   domeLedPoints = buildDomeLedPoints(domeLayout.geometry, domeLayout.mapping);
+  domeLedStrutOffsets = domeStrutLedOffsets(domeLayout.mapping);
 }
 
 function resizeSimulatorCanvas() {
@@ -871,6 +903,7 @@ function redrawLatestSimulatorFrame() {
     scheduleSimulatorFrame(latestSimulatorFrame);
   } else {
     resizeSimulatorCanvas();
+    resetDomeFrameColors();
     clearCanvas();
     drawBarSimulator([]);
     drawStageSimulator([]);
@@ -906,7 +939,6 @@ function scheduleSimulatorFrame(frame) {
 
 function drawSimulatorFrame(frame) {
   resizeSimulatorCanvas();
-  clearCanvas();
 
   for (const command of frame.commands) {
     if (command.kind === 'frame') {
@@ -915,6 +947,8 @@ function drawSimulatorFrame(frame) {
       drawPixel(command);
     }
   }
+  clearCanvas();
+  drawDomeFrameBuffer();
   drawBarSimulator(frame.bar_commands ?? []);
   drawStageSimulator(frame.stage_commands ?? []);
 }
@@ -1254,6 +1288,19 @@ document.querySelector('#apply-structured-config')?.addEventListener('click', as
 
 document.querySelector('#tap-tempo')?.addEventListener('click', async () => {
   updateSnapshot(await request('/api/input/tap', { method: 'POST' }));
+  await refreshPreviewFrame();
+});
+
+document.querySelector('#apply-bpm')?.addEventListener('click', async () => {
+  const bpm = Number(manualBpm?.value);
+  if (!Number.isFinite(bpm) || bpm <= 0) {
+    manualBpm?.reportValidity();
+    return;
+  }
+  updateSnapshot(await request('/api/input/tempo', {
+    method: 'POST',
+    body: JSON.stringify({ bpm }),
+  }));
   await refreshPreviewFrame();
 });
 

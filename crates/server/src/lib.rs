@@ -4,7 +4,10 @@ use std::{
     collections::VecDeque,
     net::SocketAddr,
     process::Stdio,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
@@ -56,8 +59,8 @@ use tokio::{
 /// Engine frame interval for the 400 Hz compute cap.
 pub const ENGINE_FRAME_INTERVAL: Duration = Duration::from_micros(2_500);
 
-/// Emit a browser simulator frame roughly every 17.5 ms while the engine runs.
-pub const SIMULATOR_FRAME_STRIDE: u64 = 7;
+/// Emit simulator frames every 10 ms, matching Spectrum's WPF simulator timer.
+pub const SIMULATOR_FRAME_STRIDE: u64 = 4;
 
 const DOME_CONTROL_BOX_PIXEL_COUNT: usize = 214 * 8;
 
@@ -143,7 +146,7 @@ pub struct InputStatus {
     pub orientation_adapter: InputAdapterStatus,
     /// Managed Madmom sidecar status.
     pub madmom_adapter: InputAdapterStatus,
-    /// Ableton Link / Carabiner-compatible sidecar status.
+    /// DJ Link / Carabiner-compatible sidecar status.
     pub link_adapter: InputAdapterStatus,
 }
 
@@ -609,6 +612,14 @@ impl ServerState {
         }
     }
 
+    /// Set human tempo directly from a BPM override.
+    pub fn set_manual_bpm(&mut self, bpm: f64) {
+        if self.inputs.beat.set_bpm(bpm, self.now_ms()) {
+            self.inputs.taps = 0;
+            self.inputs.madmom_beats = 0;
+        }
+    }
+
     /// Reset tempo state.
     pub fn reset_tempo(&mut self) {
         self.inputs.beat.reset();
@@ -630,7 +641,7 @@ impl ServerState {
         }
     }
 
-    /// Parse and record an Ableton Link / Carabiner sidecar tempo line.
+    /// Parse and record a DJ Link / Carabiner sidecar tempo line.
     pub fn report_link_line(&mut self, line: &str) -> bool {
         if let Some(event) = parse_link_tempo_line(line) {
             self.inputs.link_adapter.events = self.inputs.link_adapter.events.saturating_add(1);
@@ -640,7 +651,7 @@ impl ServerState {
                 .report_link_tempo(event.bpm, event.phase, self.now_ms());
             true
         } else {
-            self.inputs.link_adapter.last_error = Some("malformed Link tempo line".to_string());
+            self.inputs.link_adapter.last_error = Some("malformed DJ Link tempo line".to_string());
             false
         }
     }
@@ -836,7 +847,7 @@ impl ServerState {
     /// Produce one deterministic simulator frame for the selected visualizer.
     pub fn simulator_frame(&mut self) -> OperatorCommandFrame {
         self.metrics.simulator_frames = self.metrics.simulator_frames.saturating_add(1);
-        self.operator_frame_with_visualizer_frame(self.metrics.simulator_frames)
+        self.operator_frame()
     }
 
     fn record_simulator_frame(&mut self) {
@@ -915,16 +926,12 @@ impl ServerState {
             controls.volume = volume;
         } else if let Some(volume) = self.inputs.volume {
             controls.volume = volume;
-        } else if self.running {
-            controls.volume = animated_volume(self.now_ms());
         }
         if self.inputs.beat.beat_ms().is_some() {
             controls.beat_progress = self
                 .inputs
                 .beat
                 .progress(self.now_ms(), MEASURE_PROGRESS_FACTOR);
-        } else if self.running {
-            controls.beat_progress = animated_beat_progress(self.now_ms());
         }
         controls
     }
@@ -1155,6 +1162,7 @@ pub struct AppRuntime {
     frames: broadcast::Sender<SimulatorFrame>,
     engine_task: Arc<Mutex<Option<JoinHandle<()>>>>,
     input_tasks: Arc<Mutex<Vec<JoinHandle<()>>>>,
+    sandbox_frame_index: Arc<AtomicU64>,
 }
 
 impl Default for AppRuntime {
@@ -1177,6 +1185,7 @@ impl AppRuntime {
             frames,
             engine_task: Arc::new(Mutex::new(None)),
             input_tasks: Arc::new(Mutex::new(Vec::new())),
+            sandbox_frame_index: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -1200,6 +1209,7 @@ impl AppRuntime {
             .route("/api/config/diagnostics", patch(patch_diagnostics))
             .route("/api/config/palette", patch(patch_palette_entry))
             .route("/api/input/tap", post(tap_tempo))
+            .route("/api/input/tempo", post(set_manual_tempo))
             .route("/api/input/tempo/reset", post(reset_tempo))
             .route(
                 "/api/input/orientation/calibrate",
@@ -1331,6 +1341,13 @@ impl AppRuntime {
         state.snapshot()
     }
 
+    /// Set tempo from a manual BPM override.
+    pub async fn set_manual_tempo(&self, bpm: f64) -> ServerSnapshot {
+        let mut state = self.state.lock().await;
+        state.set_manual_bpm(bpm);
+        state.snapshot()
+    }
+
     /// Reset tempo input state.
     pub async fn reset_tempo(&self) -> ServerSnapshot {
         let mut state = self.state.lock().await;
@@ -1388,15 +1405,20 @@ impl AppRuntime {
         request: SimulatorSandboxRequest,
     ) -> SimulatorFrame {
         let state = self.state.lock().await;
-        let commands = render_dome_visualizer(
-            visualizer_from_index(request.active_visualizer.unwrap_or(0)),
-            request.visualizer_input(),
+        let mut config = state.full_config();
+        request.apply_to_config(&mut config);
+        let visualizer_frame_index = self.sandbox_frame_index.fetch_add(1, Ordering::Relaxed);
+        let frame = render_operator_frame(
+            &config,
+            request.simulator_controls(),
+            state.metrics.frames,
+            visualizer_frame_index,
         );
         SimulatorFrame {
             metrics: state.metrics(),
-            commands: serialize_commands(commands),
-            bar_commands: Vec::new(),
-            stage_commands: Vec::new(),
+            commands: serialize_commands(frame.dome),
+            bar_commands: serialize_bar_commands(frame.bar),
+            stage_commands: serialize_stage_commands(frame.stage),
         }
     }
 
@@ -1958,10 +1980,10 @@ fn spawn_link_task(state: Arc<Mutex<ServerState>>, config: DomersConfig) -> Join
             }
         };
         let Some(stdout) = child.stdout.take() else {
-            state
-                .lock()
-                .await
-                .record_input_adapter_error(InputAdapter::Link, "Link sidecar stdout unavailable");
+            state.lock().await.record_input_adapter_error(
+                InputAdapter::Link,
+                "DJ Link sidecar stdout unavailable",
+            );
             let _ = child.kill().await;
             return;
         };
@@ -2229,6 +2251,13 @@ pub struct PaletteEntryPatch {
     pub color2_enabled: Option<bool>,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize)]
+/// Manual tempo patch payload.
+pub struct ManualTempoPatch {
+    /// Human tempo override in beats per minute.
+    pub bpm: f64,
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
 /// Simulator control patch payload.
 pub struct SimulatorControlsPatch {
@@ -2276,8 +2305,23 @@ pub struct SimulatorSandboxRequest {
 }
 
 impl SimulatorSandboxRequest {
-    fn visualizer_input(self) -> VisualizerInput {
-        let palette_entries = [
+    fn simulator_controls(self) -> SimulatorControls {
+        SimulatorControls {
+            volume: self.volume.unwrap_or(0.7).clamp(0.0, 1.0),
+            beat_progress: self.beat_progress.unwrap_or(0.25).clamp(0.0, 1.0),
+            flash_active: self.flash_active.unwrap_or(true),
+            orientation_override_enabled: self.orientation_override_enabled.unwrap_or(false),
+            orientation_yaw: self.orientation_yaw.unwrap_or(0.0),
+            orientation_pitch: self.orientation_pitch.unwrap_or(-90.0),
+            orientation_roll: self.orientation_roll.unwrap_or(0.0),
+        }
+    }
+
+    fn apply_to_config(self, config: &mut DomersConfig) {
+        config.dome.active_visualizer = self.active_visualizer.unwrap_or(0);
+        config.color_palette_index = 0;
+
+        let sandbox_entries = [
             domers_core::PaletteEntry::solid(self.primary.unwrap_or(0x00_ff_00)),
             domers_core::PaletteEntry::solid(self.secondary.unwrap_or(0x00_80_ff)),
             domers_core::PaletteEntry::solid(self.accent.unwrap_or(0xff_40_80)),
@@ -2287,32 +2331,11 @@ impl SimulatorSandboxRequest {
             domers_core::PaletteEntry::solid(0xff_ff_ff),
             domers_core::PaletteEntry::solid(0),
         ];
-        VisualizerInput {
-            volume: self.volume.unwrap_or(0.7).clamp(0.0, 1.0),
-            beat_progress: self.beat_progress.unwrap_or(0.25).clamp(0.0, 1.0),
-            animation_frame: 0,
-            orientation_override: self.orientation_override_enabled.unwrap_or(false).then(|| {
-                orientation_override_from_degrees(
-                    self.orientation_yaw.unwrap_or(0.0),
-                    self.orientation_pitch.unwrap_or(-90.0),
-                    self.orientation_roll.unwrap_or(0.0),
-                )
-            }),
-            flash_active: self.flash_active.unwrap_or(true),
-            primary: domers_core::Rgb::from_u24(self.primary.unwrap_or(0x00_ff_00)),
-            secondary: domers_core::Rgb::from_u24(self.secondary.unwrap_or(0x00_80_ff)),
-            accent: domers_core::Rgb::from_u24(self.accent.unwrap_or(0xff_40_80)),
-            palette: [
-                domers_core::Rgb::from_u24(self.primary.unwrap_or(0x00_ff_00)),
-                domers_core::Rgb::from_u24(self.secondary.unwrap_or(0x00_80_ff)),
-                domers_core::Rgb::from_u24(self.accent.unwrap_or(0xff_40_80)),
-                domers_core::Rgb::from_u24(0xff_ff_00),
-                domers_core::Rgb::from_u24(0xff_00_ff),
-                domers_core::Rgb::from_u24(0x00_ff_ff),
-                domers_core::Rgb::from_u24(0xff_ff_ff),
-                domers_core::Rgb::BLACK,
-            ],
-            palette_entries,
+
+        for (index, entry) in sandbox_entries.into_iter().enumerate() {
+            if let Some(target) = config.color_palette.colors.get_mut(index) {
+                *target = entry;
+            }
         }
     }
 }
@@ -2412,6 +2435,14 @@ async fn patch_palette_entry(
 
 async fn tap_tempo(State(runtime): State<AppRuntime>) -> Json<ServerSnapshot> {
     runtime.tap_tempo().await;
+    Json(runtime.snapshot().await)
+}
+
+async fn set_manual_tempo(
+    State(runtime): State<AppRuntime>,
+    Json(patch): Json<ManualTempoPatch>,
+) -> Json<ServerSnapshot> {
+    runtime.set_manual_tempo(patch.bpm).await;
     Json(runtime.snapshot().await)
 }
 
@@ -2843,38 +2874,7 @@ fn stage_side_lengths(config: &DomersConfig) -> Vec<usize> {
         .collect()
 }
 
-const FALLBACK_BEAT_MS: u64 = 1_000;
-const BEATS_PER_MEASURE: u64 = 4;
-const FALLBACK_MEASURE_MS: u64 = FALLBACK_BEAT_MS * BEATS_PER_MEASURE;
-const FALLBACK_MEASURE_MS_F64: f64 = 4_000.0;
 const MEASURE_PROGRESS_FACTOR: f64 = 0.25;
-
-fn animated_beat_progress(now_ms: u64) -> f64 {
-    f64::from((now_ms % FALLBACK_MEASURE_MS) as u32) / FALLBACK_MEASURE_MS_F64
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "No-input simulator fallback is clamped before converting to visualizer f32 input"
-)]
-fn animated_volume(now_ms: u64) -> f32 {
-    let phase = animated_beat_progress(now_ms) * std::f64::consts::TAU;
-    ((phase.sin() + 1.0) * 0.35 + 0.25).clamp(0.0, 1.0) as f32
-}
-
-const fn visualizer_from_index(index: u8) -> LiveVisualizer {
-    match index {
-        1 => LiveVisualizer::Radial,
-        2 => LiveVisualizer::Race,
-        3 => LiveVisualizer::Snakes,
-        4 => LiveVisualizer::QuaternionTest,
-        5 => LiveVisualizer::QuaternionMultiTest,
-        6 => LiveVisualizer::QuaternionPaintbrush,
-        7 => LiveVisualizer::Splat,
-        8 => LiveVisualizer::TvStatic,
-        _ => LiveVisualizer::Volume,
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -3009,15 +3009,42 @@ mod tests {
     }
 
     #[test]
-    fn fallback_preview_uses_spectrum_measure_timing() {
+    fn no_tempo_preview_does_not_animate_beat_or_volume() {
         let mut state = ServerState::default();
         state.start();
 
         state.set_now_ms_for_test(1_000);
-        assert!((state.visualizer_controls().beat_progress - 0.25).abs() < f64::EPSILON);
+        let first = state.visualizer_controls();
 
         state.set_now_ms_for_test(4_000);
-        assert!(state.visualizer_controls().beat_progress.abs() < f64::EPSILON);
+        let second = state.visualizer_controls();
+
+        assert!((first.beat_progress - second.beat_progress).abs() < f64::EPSILON);
+        assert!((first.volume - second.volume).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn no_tempo_radial_preview_stays_static_after_first_frame() {
+        let mut state = ServerState::default();
+        state.patch_dome_config(super::DomeConfigPatch {
+            active_visualizer: Some(1),
+            flash_speed: None,
+            color_palette_index: None,
+        });
+        state.start();
+
+        for _ in 0..super::SIMULATOR_FRAME_STRIDE {
+            state.engine_frame();
+        }
+        let first = state.operator_frame().dome;
+
+        state.set_now_ms_for_test(10_000);
+        for _ in 0..super::SIMULATOR_FRAME_STRIDE {
+            state.engine_frame();
+        }
+        let second = state.operator_frame().dome;
+
+        assert_eq!(first, second);
     }
 
     #[test]
@@ -3050,6 +3077,38 @@ mod tests {
     }
 
     #[test]
+    fn manual_bpm_override_sets_tempo_and_clears_taps() {
+        let mut state = ServerState::default();
+        state.tap_tempo_at(1_000);
+        state.tap_tempo_at(1_500);
+        state.set_now_ms_for_test(2_000);
+
+        state.set_manual_bpm(120.0);
+
+        let snapshot = state.snapshot();
+        assert_eq!(snapshot.inputs.taps, 0);
+        assert_eq!(snapshot.inputs.beat_ms, Some(500));
+        assert_eq!(snapshot.inputs.bpm, "120");
+        assert_eq!(snapshot.inputs.tap_counter_text, "Tap");
+        assert!(snapshot.inputs.beat_progress < 0.01);
+    }
+
+    #[test]
+    fn manual_ten_bpm_drives_slow_measure_progress() {
+        let mut state = ServerState::default();
+        state.set_now_ms_for_test(1_000);
+        state.set_manual_bpm(10.0);
+
+        state.set_now_ms_for_test(4_000);
+        assert!((state.snapshot().inputs.beat_progress - 0.5).abs() < 0.01);
+        assert!((state.visualizer_controls().beat_progress - 0.125).abs() < 0.01);
+
+        state.set_now_ms_for_test(13_000);
+        assert!((state.snapshot().inputs.beat_progress - 0.0).abs() < 0.01);
+        assert!((state.visualizer_controls().beat_progress - 0.5).abs() < 0.01);
+    }
+
+    #[test]
     fn preview_frames_do_not_advance_engine_time_or_beat_phase() {
         let mut state = ServerState::default();
         state.tap_tempo_at(0);
@@ -3072,6 +3131,11 @@ mod tests {
     #[test]
     fn visualizer_animation_uses_preview_cadence_not_engine_cadence() {
         let mut state = ServerState::default();
+        assert_eq!(
+            super::ENGINE_FRAME_INTERVAL
+                * u32::try_from(super::SIMULATOR_FRAME_STRIDE).expect("stride fits in u32"),
+            Duration::from_millis(10)
+        );
 
         assert_eq!(state.visualizer_frame_index(), 0);
         for _ in 0..(super::SIMULATOR_FRAME_STRIDE - 1) {
@@ -3080,6 +3144,7 @@ mod tests {
         assert_eq!(state.visualizer_frame_index(), 0);
         state.engine_frame();
         assert_eq!(state.visualizer_frame_index(), 1);
+        assert_eq!(state.simulator_frame().dome, state.operator_frame().dome);
 
         let mut preview_state = ServerState::default();
         let _ = preview_state.simulator_frame();
@@ -3669,6 +3734,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sandbox_frame_renders_configured_support_outputs() {
+        let mut config = DomersConfig::default();
+        config.bar.simulation_enabled = true;
+        config.bar.test_pattern = 1;
+        config.stage.simulation_enabled = true;
+        config.stage.side_lengths = vec![3, 4, 5];
+        let runtime = AppRuntime::new(config);
+
+        let frame = runtime
+            .simulator_sandbox_frame(super::SimulatorSandboxRequest {
+                active_visualizer: Some(0),
+                volume: Some(0.8),
+                beat_progress: Some(0.25),
+                flash_active: Some(false),
+                orientation_override_enabled: None,
+                orientation_yaw: None,
+                orientation_pitch: None,
+                orientation_roll: None,
+                primary: Some(0xff_00_00),
+                secondary: Some(0x00_ff_00),
+                accent: Some(0x00_00_ff),
+            })
+            .await;
+
+        assert!(!frame.commands.is_empty());
+        assert!(!frame.bar_commands.is_empty());
+        assert!(!frame.stage_commands.is_empty());
+    }
+
+    #[tokio::test]
+    async fn sandbox_frame_advances_frame_driven_visualizers_without_runtime_metrics() {
+        let runtime = AppRuntime::default();
+        let before = runtime.snapshot().await.metrics;
+        let request = super::SimulatorSandboxRequest {
+            active_visualizer: Some(6),
+            volume: Some(0.7),
+            beat_progress: Some(0.25),
+            flash_active: Some(false),
+            orientation_override_enabled: None,
+            orientation_yaw: None,
+            orientation_pitch: None,
+            orientation_roll: None,
+            primary: Some(0xff_00_00),
+            secondary: Some(0x00_ff_00),
+            accent: Some(0x00_00_ff),
+        };
+
+        let first = runtime.simulator_sandbox_frame(request).await;
+        let second = runtime.simulator_sandbox_frame(request).await;
+        let after = runtime.snapshot().await.metrics;
+
+        assert_ne!(first.commands, second.commands);
+        assert_eq!(before, after);
+    }
+
+    #[tokio::test]
     async fn hardware_outputs_send_mapped_dome_frame_to_loopback_opc() {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
@@ -3833,6 +3954,14 @@ mod tests {
         )
         .await;
         assert!(tapped.contains("\"taps\":1"));
+
+        let manual_tempo = http_request(
+            addr,
+            "POST /api/input/tempo HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 13\r\nConnection: close\r\n\r\n{\"bpm\":120.0}",
+        )
+        .await;
+        assert!(manual_tempo.contains("\"beat_ms\":500"));
+        assert!(manual_tempo.contains("\"bpm\":\"120\""));
 
         let geometry = http_request(
             addr,

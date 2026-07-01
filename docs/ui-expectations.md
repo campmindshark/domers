@@ -13,13 +13,13 @@ Expected elements:
 - `Start` and `Stop` engine buttons
 - engine status text
 - `Config Editor` drawer with full native JSON config reload/apply controls plus card-based structured input, tempo, Madmom, output, brightness, and stage-layout controls
-- fixed runtime status footer showing dome/bar and stage OPC targets plus audio, MIDI, MIDI level-driver, orientation, Madmom, Link, and orientation-device status
+- fixed runtime status footer showing dome/bar and stage OPC targets plus audio, MIDI, MIDI level-driver, orientation, Madmom, DJ Link, and orientation-device status
 - WebSocket stream status text
 - `domeActiveVis` selector with Volume, Radial, Race, Snakes, Quaternion Test, Quaternion Multi Test, Quaternion Paintbrush, Splat, and TV Static
 - `flashSpeed` slider
 - closed `Palettes` drawer with the active palette selector
 - opening `Palettes` shows all eight palette slots at once, each with eight editable entries, `color1`, `color2`, and gradient enablement
-- closed `Inputs` drawer with tap tempo, reset tempo, orientation calibration, and MIDI log
+- closed `Inputs` drawer split into BPM, Wands, and MIDI sections with tap/reset/manual BPM tempo, orientation calibration, and MIDI log
 - closed `Debug Visuals` drawer with selectors for dome, bar, and stage test patterns
 - closed `Preview` drawer
 - link from the preview drawer to `/simulator`

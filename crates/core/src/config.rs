@@ -48,7 +48,7 @@ pub struct DomersConfig {
     pub color_palette_index: u8,
     /// Madmom sidecar config.
     pub madmom: MadmomConfig,
-    /// Ableton Link / Carabiner-compatible sidecar config.
+    /// DJ Link / Carabiner-compatible sidecar config.
     #[serde(default)]
     pub carabiner: CarabinerConfig,
     /// Spectrum level-driver presets and channel assignments.
@@ -280,7 +280,7 @@ pub enum TempoSource {
     Human,
     /// Madmom sidecar beat detector.
     Madmom,
-    /// Ableton Link / Carabiner tempo sync.
+    /// DJ Link / Carabiner tempo sync.
     Link,
 }
 
@@ -296,7 +296,7 @@ pub struct MadmomConfig {
     pub audio_input_index: Option<u32>,
 }
 
-/// Ableton Link / Carabiner-compatible sidecar config.
+/// DJ Link / Carabiner-compatible sidecar config.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CarabinerConfig {
     /// Sidecar executable or command name.
@@ -655,11 +655,11 @@ pub fn import_spectrum_xml(xml: &str) -> ImportedConfig {
     config.bar.test_pattern = u8_tag(xml, "barTestPattern").unwrap_or(config.bar.test_pattern);
 
     config.stage.enabled = bool_tag(xml, "stageEnabled").unwrap_or(config.stage.enabled);
-    config.stage.simulation_enabled = config.stage.enabled;
     config.stage.opc_address = string_tag(xml, "stageBeagleboneOPCAddress")
         .map(|address| localhost_opc_address(&address))
         .unwrap_or(config.stage.opc_address);
     config.stage.side_lengths = stage_side_lengths(xml);
+    config.stage.simulation_enabled = config.stage.enabled || !config.stage.side_lengths.is_empty();
     config.stage.brightness = f64_tag(xml, "stageBrightness").unwrap_or(config.stage.brightness);
     config.stage.test_pattern =
         u8_tag(xml, "stageTestPattern").unwrap_or(config.stage.test_pattern);

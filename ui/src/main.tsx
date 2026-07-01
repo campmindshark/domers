@@ -92,7 +92,7 @@ function ConfigEditor() {
               <select id="config-tempo-source" name="configTempoSource">
                 <option value="human">Human</option>
                 <option value="madmom">Madmom</option>
-                <option value="link">Ableton Link / Carabiner</option>
+                <option value="link">DJ Link / Carabiner</option>
               </select>
             </label>
             <label className="config-field">
@@ -108,13 +108,13 @@ function ConfigEditor() {
               <input id="config-madmom-audio-index" name="configMadmomAudioIndex" type="number" min="0" placeholder="0" />
             </label>
             <label className="config-field">
-              <span className="config-field-label">Link sidecar command</span>
+              <span className="config-field-label">DJ Link sidecar command</span>
               <span className="field-hint">macOS/Linux command that prints tempo lines such as "LINK 120 0.25".</span>
               <input id="config-carabiner-command" name="configCarabinerCommand" type="text" placeholder="carabiner" />
             </label>
             <label className="config-field">
-              <span className="config-field-label">Link sidecar args</span>
-              <span className="field-hint">Whitespace-separated arguments for the Link sidecar.</span>
+              <span className="config-field-label">DJ Link sidecar args</span>
+              <span className="field-hint">Whitespace-separated arguments for the DJ Link sidecar.</span>
               <input id="config-carabiner-args" name="configCarabinerArgs" type="text" placeholder="--stdout-tempo" />
             </label>
           </section>
@@ -274,24 +274,46 @@ function InputsPanel() {
   return (
     <section id="inputs-drawer" aria-label="Inputs">
       <h2>Inputs</h2>
-      <button id="tap-tempo" type="button">
-        Tap Tempo
-      </button>
-      <button id="reset-tempo" type="button">
-        Reset Tempo
-      </button>
-      <button id="orientation-calibrate" type="button">
-        Calibrate Orientation
-      </button>
-      <p>
-        BPM: <span id="tempo-bpm">[none]</span> Tap counter: <span id="tap-counter">Tap</span>
-      </p>
-      <section aria-label="MIDI Log">
-        <h3>MIDI Log</h3>
-        <ol id="midi-log" className="device-list">
-          <li>none</li>
-        </ol>
-      </section>
+      <div className="config-section-grid">
+        <section className="config-card" aria-label="BPM">
+          <h3>BPM</h3>
+          <div className="inline-field-grid">
+            <button id="tap-tempo" type="button">
+              Tap Tempo
+            </button>
+            <button id="reset-tempo" type="button">
+              Reset Tempo
+            </button>
+          </div>
+          <div className="inline-field-grid">
+            <label className="config-field">
+              <span className="config-field-label">Manual BPM</span>
+              <input id="manual-bpm" type="number" min="1" max="600" step="0.1" placeholder="120" />
+            </label>
+            <button id="apply-bpm" type="button">
+              Apply BPM
+            </button>
+          </div>
+          <p>
+            BPM: <span id="tempo-bpm">[none]</span>
+          </p>
+          <p>
+            Tap counter: <span id="tap-counter">Tap</span>
+          </p>
+        </section>
+        <section className="config-card" aria-label="Wands">
+          <h3>Wands</h3>
+          <button id="orientation-calibrate" type="button">
+            Calibrate Orientation
+          </button>
+        </section>
+        <section className="config-card" aria-label="MIDI">
+          <h3>MIDI</h3>
+          <ol id="midi-log" className="device-list">
+            <li>none</li>
+          </ol>
+        </section>
+      </div>
     </section>
   );
 }
@@ -438,7 +460,7 @@ function OpcTargetsFooter() {
             <span id="input-madmom">disabled</span>
           </p>
           <p className="target-status">
-            <strong>Link</strong>
+            <strong>DJ Link</strong>
             <span id="input-link">disabled</span>
           </p>
         </div>

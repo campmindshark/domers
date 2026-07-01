@@ -24924,6 +24924,9 @@ function updateInputStatus(inputs) {
   if (tempoBpm) {
     tempoBpm.textContent = inputs.bpm ?? "[none]";
   }
+  if (manualBpm && document.activeElement !== manualBpm) {
+    manualBpm.value = inputs.bpm && inputs.bpm !== "[none]" ? inputs.bpm : "";
+  }
   if (tapCounter) {
     tapCounter.textContent = inputs.tap_counter_text ?? "Tap";
     tapCounter.dataset.active = String(Boolean(inputs.tap_counter_active));
@@ -25074,6 +25077,9 @@ function clearCanvas() {
   context.fillStyle = "#000000";
   context.fillRect(0, 0, canvas.width, canvas.height);
 }
+function resetDomeFrameColors() {
+  domeFrameColors = [];
+}
 function clearSupportCanvas(canvasElement, canvasContext) {
   if (!canvasElement || !canvasContext) {
     return;
@@ -25082,22 +25088,33 @@ function clearSupportCanvas(canvasElement, canvasContext) {
   canvasContext.fillRect(0, 0, canvasElement.width, canvasElement.height);
 }
 function drawFrame(colors) {
-  if (!context || !colors.length) {
+  if (!colors.length) {
+    return;
+  }
+  domeFrameColors = colors.slice();
+}
+function drawPixel(command) {
+  const index = (domeLedStrutOffsets[command.strut_index] ?? 0) + command.led_index;
+  ensureDomeFrameColors(index + 1);
+  domeFrameColors[index] = command.color;
+}
+function ensureDomeFrameColors(length) {
+  if (domeFrameColors.length >= length) {
+    return;
+  }
+  const oldLength = domeFrameColors.length;
+  domeFrameColors.length = length;
+  domeFrameColors.fill(0, oldLength);
+}
+function drawDomeFrameBuffer() {
+  if (!context || !domeFrameColors.length) {
     return;
   }
   context.lineWidth = 1;
-  colors.forEach((color, index) => {
-    const point = domeLedPoints[index] ?? fallbackDomePoint(index, colors.length);
+  domeFrameColors.forEach((color, index) => {
+    const point = domeLedPoints[index] ?? fallbackDomePoint(index, domeFrameColors.length);
     drawLed(point.x, point.y, color, point.size);
   });
-}
-function drawPixel(command) {
-  if (!context) {
-    return;
-  }
-  const index = command.strut_index * 3 + command.led_index;
-  const point = domeLedPoints[index] ?? fallbackDomePoint(index, 190);
-  drawLed(point.x, point.y, command.color, point.size * 2);
 }
 function drawLed(x, y, color, radius) {
   context.fillStyle = toColorInput(color);
@@ -25143,6 +25160,15 @@ function buildDomeLedPoints(geometry, mapping) {
   }
   return points;
 }
+function domeStrutLedOffsets(mapping) {
+  const ledCounts = domeStrutLedCounts(mapping);
+  let offset = 0;
+  return ledCounts.map((count) => {
+    const strutOffset = offset;
+    offset += count;
+    return strutOffset;
+  });
+}
 function domeStrutLedCounts(mapping) {
   return mapping.strut_positions.map((position) => {
     let strutsLeft = position.control_box_strut_index;
@@ -25160,6 +25186,7 @@ function rebuildDomeLedPoints() {
     return;
   }
   domeLedPoints = buildDomeLedPoints(domeLayout.geometry, domeLayout.mapping);
+  domeLedStrutOffsets = domeStrutLedOffsets(domeLayout.mapping);
 }
 function resizeSimulatorCanvas() {
   if (!canvas || !context) {
@@ -25194,6 +25221,7 @@ function redrawLatestSimulatorFrame() {
     scheduleSimulatorFrame(latestSimulatorFrame);
   } else {
     resizeSimulatorCanvas();
+    resetDomeFrameColors();
     clearCanvas();
     drawBarSimulator([]);
     drawStageSimulator([]);
@@ -25226,7 +25254,6 @@ function scheduleSimulatorFrame(frame) {
 }
 function drawSimulatorFrame(frame) {
   resizeSimulatorCanvas();
-  clearCanvas();
   for (const command of frame.commands) {
     if (command.kind === "frame") {
       drawFrame(command.colors);
@@ -25234,6 +25261,8 @@ function drawSimulatorFrame(frame) {
       drawPixel(command);
     }
   }
+  clearCanvas();
+  drawDomeFrameBuffer();
   drawBarSimulator(frame.bar_commands ?? []);
   drawStageSimulator(frame.stage_commands ?? []);
 }
@@ -25514,7 +25543,7 @@ function connectSimulatorStream() {
     }
   });
 }
-var status, streamStatus, hardwareDome, hardwareStage, activeVisualizer, flashSpeed, flashSpeedValue, domeTestPattern, barTestPattern, stageTestPattern, configEditor, configStatus, configAudioBind, configAudioNativeEnabled, configAudioDeviceId, configMidiBind, configMidiNativeEnabled, configMidiDeviceId, configOrientationBind, configTempoSource, configMadmomCommand, configMadmomTracker, configMadmomAudioIndex, configCarabinerCommand, configCarabinerArgs, configMidiBindings, configDomeEnabled, configDomeSimulationEnabled, configDomeOpcAddress, configDomeBrightnessSlider, configDomeBrightness, configBarEnabled, configBarSimulationEnabled, configBarInfinityLength, configBarInfinityWidth, configBarRunnerLength, configBarBrightnessSlider, configBarBrightness, configStageEnabled, configStageSimulationEnabled, configStageOpcAddress, configStageBrightnessSlider, configStageBrightness, configStageSideLengths, configStageSideLengthsSummary, configStageSideLengthsGrid, simVolume, simVolumeValue, simBeatProgress, simBeatProgressValue, simFlashActive, paletteIndex, paletteGrid, paletteControls, inputAudio, inputMidi, inputMidiLevels, inputOrientation, inputMadmom, inputLink, orientationDevices, midiLog, tempoBpm, tapCounter, sandboxActiveVisualizer, sandboxVolume, sandboxVolumeValue, sandboxBeatProgress, sandboxBeatProgressValue, sandboxFlashActive, sandboxOrientationEnabled, sandboxOrientationYaw, sandboxOrientationYawValue, sandboxOrientationPitch, sandboxOrientationPitchValue, sandboxOrientationRoll, sandboxOrientationRollValue, sandboxPalettePrimary, sandboxPaletteSecondary, sandboxPaletteAccent, metricFrames, metricSimulatorFrames, tabButtons, tabPanels, canvas, context, barSimulator, barContext, stageSimulator, stageContext, isDedicatedSimulatorPage, SPECTRUM_CANVAS_SIZE, SPECTRUM_PROJECTION_OFFSET, SPECTRUM_PROJECTION_SPAN, domeLayout, domeLedPoints, latestSimulatorFrame, pendingSimulatorFrame, simulatorPaintQueued, simulatorStarted, simulatorSocket;
+var status, streamStatus, hardwareDome, hardwareStage, activeVisualizer, flashSpeed, flashSpeedValue, domeTestPattern, barTestPattern, stageTestPattern, configEditor, configStatus, configAudioBind, configAudioNativeEnabled, configAudioDeviceId, configMidiBind, configMidiNativeEnabled, configMidiDeviceId, configOrientationBind, configTempoSource, configMadmomCommand, configMadmomTracker, configMadmomAudioIndex, configCarabinerCommand, configCarabinerArgs, configMidiBindings, configDomeEnabled, configDomeSimulationEnabled, configDomeOpcAddress, configDomeBrightnessSlider, configDomeBrightness, configBarEnabled, configBarSimulationEnabled, configBarInfinityLength, configBarInfinityWidth, configBarRunnerLength, configBarBrightnessSlider, configBarBrightness, configStageEnabled, configStageSimulationEnabled, configStageOpcAddress, configStageBrightnessSlider, configStageBrightness, configStageSideLengths, configStageSideLengthsSummary, configStageSideLengthsGrid, simVolume, simVolumeValue, simBeatProgress, simBeatProgressValue, simFlashActive, paletteIndex, paletteGrid, paletteControls, inputAudio, inputMidi, inputMidiLevels, inputOrientation, inputMadmom, inputLink, orientationDevices, midiLog, manualBpm, tempoBpm, tapCounter, sandboxActiveVisualizer, sandboxVolume, sandboxVolumeValue, sandboxBeatProgress, sandboxBeatProgressValue, sandboxFlashActive, sandboxOrientationEnabled, sandboxOrientationYaw, sandboxOrientationYawValue, sandboxOrientationPitch, sandboxOrientationPitchValue, sandboxOrientationRoll, sandboxOrientationRollValue, sandboxPalettePrimary, sandboxPaletteSecondary, sandboxPaletteAccent, metricFrames, metricSimulatorFrames, tabButtons, tabPanels, canvas, context, barSimulator, barContext, stageSimulator, stageContext, isDedicatedSimulatorPage, SPECTRUM_CANVAS_SIZE, SPECTRUM_PROJECTION_OFFSET, SPECTRUM_PROJECTION_SPAN, domeLayout, domeLedPoints, domeLedStrutOffsets, domeFrameColors, latestSimulatorFrame, pendingSimulatorFrame, simulatorPaintQueued, simulatorStarted, simulatorSocket;
 var init_main = __esm({
   async "main.mjs"() {
     "use strict";
@@ -25580,6 +25609,7 @@ var init_main = __esm({
     inputLink = document.querySelector("#input-link");
     orientationDevices = document.querySelector("#orientation-devices");
     midiLog = document.querySelector("#midi-log");
+    manualBpm = document.querySelector("#manual-bpm");
     tempoBpm = document.querySelector("#tempo-bpm");
     tapCounter = document.querySelector("#tap-counter");
     sandboxActiveVisualizer = document.querySelector("#sandbox-dome-active-vis");
@@ -25613,6 +25643,8 @@ var init_main = __esm({
     SPECTRUM_PROJECTION_OFFSET = 10;
     SPECTRUM_PROJECTION_SPAN = 690;
     domeLedPoints = [];
+    domeLedStrutOffsets = [];
+    domeFrameColors = [];
     simulatorPaintQueued = false;
     simulatorStarted = false;
     renderPaletteEditor();
@@ -25643,6 +25675,18 @@ var init_main = __esm({
     });
     document.querySelector("#tap-tempo")?.addEventListener("click", async () => {
       updateSnapshot(await request("/api/input/tap", { method: "POST" }));
+      await refreshPreviewFrame();
+    });
+    document.querySelector("#apply-bpm")?.addEventListener("click", async () => {
+      const bpm = Number(manualBpm?.value);
+      if (!Number.isFinite(bpm) || bpm <= 0) {
+        manualBpm?.reportValidity();
+        return;
+      }
+      updateSnapshot(await request("/api/input/tempo", {
+        method: "POST",
+        body: JSON.stringify({ bpm })
+      }));
       await refreshPreviewFrame();
     });
     document.querySelector("#reset-tempo")?.addEventListener("click", async () => {
@@ -25795,7 +25839,7 @@ function ConfigEditor() {
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { id: "config-tempo-source", name: "configTempoSource", children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "human", children: "Human" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "madmom", children: "Madmom" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "link", children: "Ableton Link / Carabiner" })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "link", children: "DJ Link / Carabiner" })
             ] })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field", children: [
@@ -25811,13 +25855,13 @@ function ConfigEditor() {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-madmom-audio-index", name: "configMadmomAudioIndex", type: "number", min: "0", placeholder: "0" })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Link sidecar command" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "DJ Link sidecar command" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: 'macOS/Linux command that prints tempo lines such as "LINK 120 0.25".' }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-carabiner-command", name: "configCarabinerCommand", type: "text", placeholder: "carabiner" })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Link sidecar args" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Whitespace-separated arguments for the Link sidecar." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "DJ Link sidecar args" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "field-hint", children: "Whitespace-separated arguments for the DJ Link sidecar." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "config-carabiner-args", name: "configCarabinerArgs", type: "text", placeholder: "--stdout-tempo" })
           ] })
         ] })
@@ -25957,18 +26001,37 @@ function PaletteDrawer() {
 function InputsPanel() {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { id: "inputs-drawer", "aria-label": "Inputs", children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", { children: "Inputs" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "tap-tempo", type: "button", children: "Tap Tempo" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "reset-tempo", type: "button", children: "Reset Tempo" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "orientation-calibrate", type: "button", children: "Calibrate Orientation" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [
-      "BPM: ",
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "tempo-bpm", children: "[none]" }),
-      " Tap counter: ",
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "tap-counter", children: "Tap" })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { "aria-label": "MIDI Log", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "MIDI Log" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", { id: "midi-log", className: "device-list", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: "none" }) })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "config-section-grid", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "config-card", "aria-label": "BPM", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "BPM" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "inline-field-grid", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "tap-tempo", type: "button", children: "Tap Tempo" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "reset-tempo", type: "button", children: "Reset Tempo" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "inline-field-grid", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { className: "config-field", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { className: "config-field-label", children: "Manual BPM" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { id: "manual-bpm", type: "number", min: "1", max: "600", step: "0.1", placeholder: "120" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "apply-bpm", type: "button", children: "Apply BPM" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [
+          "BPM: ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "tempo-bpm", children: "[none]" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { children: [
+          "Tap counter: ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "tap-counter", children: "Tap" })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "config-card", "aria-label": "Wands", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "Wands" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { id: "orientation-calibrate", type: "button", children: "Calibrate Orientation" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", { className: "config-card", "aria-label": "MIDI", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", { children: "MIDI" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", { id: "midi-log", className: "device-list", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: "none" }) })
+      ] })
     ] })
   ] });
 }
@@ -26103,7 +26166,7 @@ function OpcTargetsFooter() {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "input-madmom", children: "disabled" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", { className: "target-status", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "Link" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: "DJ Link" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { id: "input-link", children: "disabled" })
         ] })
       ] }),
