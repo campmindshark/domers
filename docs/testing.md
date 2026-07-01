@@ -93,7 +93,8 @@ solution's `Madmom/Madmom.pyproj` requires Visual Studio Python Tools.
 headlessly with simulation-only output, and `check_visualizer_goldens.py` ensures
 all captured hashes are present. The ignored Rust-vs-Spectrum test is the active
 exactness ledger for the remaining live dome visualizer mismatches; Stage Depth
-now matches its captured Spectrum golden.
+now matches its captured Spectrum golden, and simulator animation now uses the
+preview-rate visualizer counter instead of the 400 Hz engine compute counter.
 
 Browser screenshots, load tests, and physical hardware sign-off artifacts are release evidence, not prerequisites for the no-hardware test suite.
 

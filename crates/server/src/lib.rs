@@ -835,7 +835,7 @@ impl ServerState {
     /// Produce one deterministic simulator frame for the selected visualizer.
     pub fn simulator_frame(&mut self) -> OperatorCommandFrame {
         self.metrics.simulator_frames = self.metrics.simulator_frames.saturating_add(1);
-        self.operator_frame()
+        self.operator_frame_with_visualizer_frame(self.metrics.simulator_frames)
     }
 
     fn record_simulator_frame(&mut self) {
@@ -845,11 +845,23 @@ impl ServerState {
     /// Produce one scheduled operator frame for all outputs.
     #[must_use]
     pub fn operator_frame(&self) -> OperatorCommandFrame {
+        self.operator_frame_with_visualizer_frame(self.visualizer_frame_index())
+    }
+
+    fn operator_frame_with_visualizer_frame(
+        &self,
+        visualizer_frame_index: u64,
+    ) -> OperatorCommandFrame {
         render_operator_frame(
             &self.config,
             self.visualizer_controls(),
             self.metrics.frames,
+            visualizer_frame_index,
         )
+    }
+
+    fn visualizer_frame_index(&self) -> u64 {
+        self.metrics.frames / SIMULATOR_FRAME_STRIDE
     }
 
     /// Return a serializable snapshot.
@@ -2512,16 +2524,17 @@ fn serialize_stage_commands(commands: Vec<StageCommand>) -> Vec<StageSimulatorCo
 fn render_operator_frame(
     config: &DomersConfig,
     simulator: SimulatorControls,
-    frame_index: u64,
+    diagnostic_frame_index: u64,
+    visualizer_frame_index: u64,
 ) -> OperatorCommandFrame {
     let engine = EngineConfig::from(config);
     let inputs = input_specs(simulator);
     let outputs = output_specs(config);
     let schedule = schedule_operator_frame(&inputs, &outputs);
-    let visualizer_input = simulator.visualizer_input(&engine, frame_index);
+    let visualizer_input = simulator.visualizer_input(&engine, visualizer_frame_index);
     let diagnostic_input = DiagnosticInput {
-        state: diagnostic_state(frame_index),
-        step: diagnostic_step(frame_index),
+        state: diagnostic_state(diagnostic_frame_index),
+        step: diagnostic_step(diagnostic_frame_index),
         brightness: brightness_f32(config.dome.brightness),
         volume: simulator.volume,
         beat_progress: simulator.beat_progress,
@@ -2975,15 +2988,20 @@ mod tests {
     fn started_runtime_animates_visualizer_inputs_without_live_sources() {
         let mut state = ServerState::default();
         state.patch_dome_config(super::DomeConfigPatch {
-            active_visualizer: Some(1),
+            active_visualizer: Some(6),
             flash_speed: None,
             color_palette_index: None,
         });
         state.start();
         state.set_now_ms_for_test(0);
-        state.engine_frame();
+        for _ in 0..super::SIMULATOR_FRAME_STRIDE {
+            state.engine_frame();
+        }
         let first = state.operator_frame().dome;
         state.set_now_ms_for_test(250);
+        for _ in 0..super::SIMULATOR_FRAME_STRIDE {
+            state.engine_frame();
+        }
         let second = state.operator_frame().dome;
 
         assert_ne!(first, second);
@@ -3033,6 +3051,24 @@ mod tests {
         assert_eq!(state.metrics().frames, 0);
         assert_eq!(state.metrics().simulator_frames, 10);
         assert!((after - before).abs() < 0.01);
+    }
+
+    #[test]
+    fn visualizer_animation_uses_preview_cadence_not_engine_cadence() {
+        let mut state = ServerState::default();
+
+        assert_eq!(state.visualizer_frame_index(), 0);
+        for _ in 0..(super::SIMULATOR_FRAME_STRIDE - 1) {
+            state.engine_frame();
+        }
+        assert_eq!(state.visualizer_frame_index(), 0);
+        state.engine_frame();
+        assert_eq!(state.visualizer_frame_index(), 1);
+
+        let mut preview_state = ServerState::default();
+        let _ = preview_state.simulator_frame();
+        assert_eq!(preview_state.metrics().simulator_frames, 1);
+        assert_eq!(preview_state.metrics().frames, 0);
     }
 
     #[test]

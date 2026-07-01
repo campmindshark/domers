@@ -1178,9 +1178,6 @@ fn quaternion_multi_test_frame(_input: VisualizerInput) -> Vec<Rgb> {
 }
 
 fn quaternion_paintbrush_frame(input: VisualizerInput) -> Vec<Rgb> {
-    // Spectrum's paintbrush idles by integrating yaw/pitch/roll momentum. This
-    // stateless port derives a long-period equivalent from runtime frame time so
-    // the brush follows a wandering path instead of one fixed beat loop.
     let orientation = input.orientation_override.map_or_else(
         || idle_paintbrush_orientation(input),
         |orientation| {
@@ -1190,7 +1187,7 @@ fn quaternion_paintbrush_frame(input: VisualizerInput) -> Vec<Rgb> {
     let threshold_factor = 0.25 + f64::from(input.volume.clamp(0.0, 1.0)) + 0.01;
     let threshold = 2.0 / threshold_factor;
     let saturation = (1.3 / f64::from(input.volume.max(0.01)) - 1.0).clamp(0.2, 1.0);
-    let contour_counter = (4.0 * f64::from(input.volume) * paintbrush_time(input)) % 100.0;
+    let contour_counter = paintbrush_contour_counter(input);
 
     DOME_LED_POINTS
         .get_or_init(build_dome_led_points)
@@ -1304,23 +1301,46 @@ impl Quaternion {
 }
 
 fn idle_paintbrush_orientation(input: VisualizerInput) -> Quaternion {
-    let time = paintbrush_time(input);
     let level = f64::from(input.volume.clamp(0.0, 1.0));
-    let speed = 0.65 + level;
-    let yaw = std::f64::consts::TAU
-        * (0.18 * speed * time + 0.08 * (0.73 * time).sin() + 0.03 * (1.91 * time).sin());
-    let pitch = std::f64::consts::TAU
-        * (-0.25 + 0.10 * (0.47 * time + 0.4).sin() + 0.035 * (1.37 * time).cos());
-    let roll =
-        std::f64::consts::TAU * (0.11 * (0.31 * time + 1.7).sin() + 0.05 * (1.13 * time).sin());
+    let frame_in_cycle = paintbrush_frame_in_cycle(input);
+    let mut random = DotNetRandom::new(0);
+    let mut yaw = 0.0;
+    let mut pitch = -0.25;
+    let mut roll = 0.0;
+    let mut yaw_momentum = 0.0;
+    let mut pitch_momentum = 0.0005;
+    let mut roll_momentum = 0.0;
+
+    for _ in 0..=frame_in_cycle {
+        yaw_momentum = (yaw_momentum + spectrum_nudge(&mut random, 0.0001)).clamp(-0.001, 0.001);
+        roll_momentum = (roll_momentum + spectrum_nudge(&mut random, 0.0001)).clamp(-0.001, 0.001);
+        pitch_momentum =
+            (pitch_momentum + spectrum_nudge(&mut random, 0.0001)).clamp(-0.001, 0.001);
+
+        let motion_scale = 4.0 * (level + 0.25);
+        yaw += motion_scale * yaw_momentum;
+        pitch += motion_scale * pitch_momentum;
+        roll += motion_scale * roll_momentum;
+    }
+
+    let yaw = std::f64::consts::TAU * yaw;
+    let pitch = std::f64::consts::TAU * pitch;
+    let roll = std::f64::consts::TAU * roll;
     Quaternion::from_yaw_pitch_roll(yaw, pitch, roll)
 }
 
-fn paintbrush_time(input: VisualizerInput) -> f64 {
-    let frame_in_cycle: u32 = (input.animation_frame % 57_600)
+fn spectrum_nudge(random: &mut DotNetRandom, scale: f64) -> f64 {
+    (random.next_double() - 0.5) * 2.0 * scale
+}
+
+fn paintbrush_frame_in_cycle(input: VisualizerInput) -> u32 {
+    (input.animation_frame % 57_600)
         .try_into()
-        .expect("paintbrush animation cycle fits in u32");
-    f64::from(frame_in_cycle) / 120.0 + input.beat_progress.rem_euclid(1.0)
+        .expect("paintbrush animation cycle fits in u32")
+}
+
+fn paintbrush_contour_counter(input: VisualizerInput) -> f64 {
+    (4.0 * f64::from(input.volume) * f64::from(paintbrush_frame_in_cycle(input) + 1)) % 100.0
 }
 
 fn spectrum_quaternion_test_point(normalized_x: f64, normalized_y: f64) -> (f64, f64, f64) {
@@ -2093,7 +2113,7 @@ mod tests {
             ),
             (
                 LiveVisualizer::QuaternionPaintbrush,
-                7_177_837_735_347_917_156,
+                16_568_517_163_162_142_121,
             ),
         ];
         let actual: Vec<_> = cases

@@ -25,7 +25,7 @@ and hardware output. Physical hardware acceptance is tracked separately.
 | Madmom | Launch args support wrapper, Spectrum-style Python working directory, async child ingestion, derived audio input indexes, and fake-sidecar tests are covered. | Shipping a bundled Madmom distribution is release packaging; runtime behavior is no-hardware tested. |
 | Beat timing | Wall-clock tap tempo, BPM string, tap counter, reset, Madmom median/backwards reset, Link/Carabiner sidecar tempo ingestion, and Spectrum truncating progress math are covered. | Packaged macOS/Linux Link sidecar remains release integration work. |
 | Operator UI | Browser shell has structured input/tempo/Madmom and output/layout config controls, full config editor, full palette editor, input status, MIDI log, orientation calibration, debug visuals, preview, and no-hardware HTTP route coverage for operator flows. | Browser screenshots remain release evidence, not feature parity deferral. |
-| Simulators | The live preview shows hardware-bound output only. The isolated simulator exposes animation/testing controls, including yaw/pitch/roll overrides, plus dome/bar/stage command previews. | Exact visual artwork remains visualizer/UI polish, not first-version parity. |
+| Simulators | The live preview shows hardware-bound output only and drives visualizer animation at the emitted preview cadence, not the 400 Hz engine compute cadence. The isolated simulator exposes animation/testing controls, including yaw/pitch/roll overrides, plus dome/bar/stage command previews. | Exact visual artwork remains visualizer/UI polish, not first-version parity. |
 | Hardware output | OPC mapping/write/reconnect loopback tests pass. | Physical dome, bar, stage, inputs, and reconnect sign-off are intentionally deferred. |
 
 ## Open TODOs
@@ -33,6 +33,12 @@ and hardware output. Physical hardware acceptance is tracked separately.
 - Visualizer exactness: 3 captured Spectrum C# goldens still differ from the
   Rust renderer: `LEDDomeVolumeVisualizer`, `LEDDomeRadialVisualizer`, and
   `LEDDomeQuaternionPaintbrushVisualizer`.
+- Simulator/animation cadence is aligned closer to Spectrum: live preview and
+  operator rendering now feed visualizers a preview-rate animation counter
+  instead of the 400 Hz engine compute counter.
+- Quaternion Paintbrush randomness is closer to Spectrum: idle orientation now
+  replays the same seeded `Random(0)` nudge integration order that Spectrum uses
+  for yaw, roll, and pitch momentum, though full frame exactness remains open.
 - Race exactness is closed: Rust now emits Spectrum-style per-pixel racer
   commands from the captured first frame, including FadeExp and Multi coloring
   behavior.

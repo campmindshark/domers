@@ -22,7 +22,7 @@ Selectable dome modes:
 - `LEDDomeSnakesVisualizer`: audio snakes mode and triangle graph helpers. Status: Rust renderer matches the captured Spectrum hash.
 - `LEDDomeQuaternionTestVisualizer`: selectable orientation test mode. Status: wired renderer with captured Spectrum hash.
 - `LEDDomeQuaternionMultiTestVisualizer`: selectable orientation test mode. Status: wired renderer with captured Spectrum hash.
-- `LEDDomeQuaternionPaintbrushVisualizer`: orientation paintbrush mode, buffer output. Status: wired renderer with captured Spectrum hash.
+- `LEDDomeQuaternionPaintbrushVisualizer`: orientation paintbrush mode, buffer output. Status: wired renderer with captured Spectrum hash; idle randomness now uses seeded Spectrum-style yaw/roll/pitch nudge integration, but exact frame parity remains open.
 - `LEDDomeSplatVisualizer`: audio splat mode, buffer output. Status: wired renderer with captured Spectrum hash.
 - `LEDDomeTVStaticVisualizer`: deterministic static mode, selectable in `dome-rs` for simulator/operator visibility. Status: Rust renderer matches the captured Spectrum hash.
 
