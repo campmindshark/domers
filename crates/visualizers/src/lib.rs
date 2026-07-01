@@ -293,7 +293,7 @@ pub fn render_dome_visualizer(
         return Vec::new();
     }
     if visualizer == LiveVisualizer::TvStatic {
-        return tv_static_commands();
+        return tv_static_commands(input);
     }
     if visualizer == LiveVisualizer::Snakes {
         return snakes_commands();
@@ -383,8 +383,10 @@ pub fn render_stage_visualizer_with_input(
     }
 }
 
-fn tv_static_commands() -> Vec<DomeCommand> {
-    let mut random = DotNetRandom::new(0);
+fn tv_static_commands(input: VisualizerInput) -> Vec<DomeCommand> {
+    let seed = i32::try_from(input.animation_frame % i32::MAX as u64)
+        .expect("TV static frame seed fits in i32");
+    let mut random = DotNetRandom::new(seed);
     let mut commands = Vec::with_capacity(DOME_PIXELS + 1);
     for strut_index in 0..DOME_STRUTS {
         let Some(strut_length) = dome_strut_length(strut_index) else {
@@ -910,9 +912,9 @@ fn volume_commands(input: VisualizerInput) -> Vec<DomeCommand> {
     let beat_progress = if input.animation_frame == 0 {
         0.0
     } else {
-        input.beat_progress
+        runtime_visualizer_progress(input, 600)
     };
-    let layouts = volume_layouts(volume_center_offset(beat_progress));
+    let layouts = volume_layouts(volume_center_offset(input, beat_progress));
     let total_parts = VOLUME_ANIMATION_SIZE;
     let volume_split_into = 2 * ((total_parts - 1) / 2 + 1);
     let level = f64::from(input.volume.clamp(0.0, 1.0));
@@ -1090,7 +1092,11 @@ fn volume_color_from_part(
     clippy::cast_sign_loss,
     reason = "Spectrum truncates ProgressThroughBeat times four to choose the volume center"
 )]
-fn volume_center_offset(beat_progress: f64) -> usize {
+fn volume_center_offset(input: VisualizerInput, beat_progress: f64) -> usize {
+    if input.animation_frame > 0 {
+        return usize::try_from((input.animation_frame / 20) % 4)
+            .expect("runtime volume center offset fits in usize");
+    }
     (progress_through_beat(beat_progress, VOLUME_ROTATION_SPEED) * 4.0) as usize
 }
 
@@ -1486,7 +1492,7 @@ fn radial_frame(input: VisualizerInput) -> Vec<Rgb> {
     let progress = if input.animation_frame == 0 {
         0.0
     } else {
-        input.beat_progress
+        runtime_visualizer_progress(input, 600)
     };
     let current_angle = wrap(progress * 0.25 * 0.25, 0.0, 1.0);
     let current_gradient = wrap(progress * 0.25, 0.0, 1.0);
@@ -1557,12 +1563,13 @@ fn splat_frame(input: VisualizerInput) -> Vec<Rgb> {
         },
     ];
 
+    let progress = runtime_visualizer_progress(input, 240);
     points
         .iter()
         .map(|point| {
             let mut color = Rgb::BLACK;
             for splat in splats {
-                let age = (input.beat_progress + splat.phase_offset).rem_euclid(1.0);
+                let age = (progress + splat.phase_offset).rem_euclid(1.0);
                 let radius = adjusted_level * (0.06 + 0.24 * age);
                 let distance = distance2(point.x, point.y, splat.center_x, splat.center_y);
                 if distance < radius {
@@ -1618,7 +1625,7 @@ fn race_pixel_color(input: VisualizerInput, projected_x: f64, projected_y: f64) 
     let px = projected_x * 2.0 - 1.0;
     let py = projected_y * 2.0 - 1.0;
     let y = 1.0 - (px * px + py * py).sqrt();
-    let angle = py.atan2(px);
+    let angle = py.atan2(px) + runtime_angle_offset(input, 360);
     let Some((racer_index, loc_ang)) = race_location(y, angle) else {
         return Rgb::BLACK;
     };
@@ -1717,12 +1724,20 @@ fn snakes_commands() -> Vec<DomeCommand> {
 }
 
 fn quaternion_test_frame(input: VisualizerInput) -> Vec<Rgb> {
-    let orientation = input.orientation_override.map_or(
-        Quaternion {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            w: 1.0,
+    let orientation = input.orientation_override.map_or_else(
+        || {
+            if input.animation_frame == 0 {
+                Quaternion {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 1.0,
+                }
+            } else {
+                let yaw = runtime_angle_offset(input, 480);
+                let pitch = -0.35 * runtime_angle_offset(input, 720).sin();
+                Quaternion::from_yaw_pitch_roll(yaw, pitch, 0.0)
+            }
         },
         |orientation| {
             Quaternion::from_yaw_pitch_roll(orientation.yaw, orientation.pitch, orientation.roll)
@@ -1743,8 +1758,24 @@ fn quaternion_test_frame(input: VisualizerInput) -> Vec<Rgb> {
         .collect()
 }
 
-fn quaternion_multi_test_frame(_input: VisualizerInput) -> Vec<Rgb> {
-    vec![Rgb::BLACK; DOME_PIXELS]
+fn quaternion_multi_test_frame(input: VisualizerInput) -> Vec<Rgb> {
+    if input.animation_frame == 0 {
+        return vec![Rgb::BLACK; DOME_PIXELS];
+    }
+    let progress = runtime_visualizer_progress(input, 360);
+    DOME_LED_POINTS
+        .get_or_init(build_dome_led_points)
+        .iter()
+        .map(|point| {
+            let wave = ((point.x + progress).rem_euclid(1.0) * std::f64::consts::TAU).sin();
+            let band = ((point.y + progress * 0.5).rem_euclid(1.0) * std::f64::consts::TAU).cos();
+            hsv_to_rgb(
+                (progress + point.x * 0.35 + point.y * 0.2).rem_euclid(1.0),
+                0.75,
+                ((wave + band + 2.0) / 4.0).clamp(0.1, 1.0),
+            )
+        })
+        .collect()
 }
 
 fn quaternion_paintbrush_frame(input: VisualizerInput) -> Vec<Rgb> {
@@ -1971,6 +2002,22 @@ fn paintbrush_stamp_ring(distance_to_spot: f64, stamp_frame: u64) -> bool {
         let half_width = 0.003 * cooldown * cooldown;
         (ring_distance - half_width..=ring_distance + half_width).contains(&distance_to_spot)
     }
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "Runtime visualizer animation periods are small preview-frame counters"
+)]
+fn runtime_visualizer_progress(input: VisualizerInput, period_frames: u64) -> f64 {
+    if input.animation_frame == 0 || period_frames == 0 {
+        return 0.0;
+    }
+    let frame = input.animation_frame % period_frames;
+    (input.beat_progress + frame as f64 / period_frames as f64).rem_euclid(1.0)
+}
+
+fn runtime_angle_offset(input: VisualizerInput, period_frames: u64) -> f64 {
+    runtime_visualizer_progress(input, period_frames) * std::f64::consts::TAU
 }
 
 fn spectrum_nudge(random: &mut DotNetRandom, scale: f64) -> f64 {
@@ -2665,6 +2712,39 @@ mod tests {
         assert_eq!(pixels.len(), DOME_PIXELS);
         assert!(pixels.windows(2).take(100).any(|pair| pair[0] != pair[1]));
         assert!(matches!(first.last(), Some(DomeCommand::Flush)));
+    }
+
+    #[test]
+    fn runtime_visualizers_animate_after_captured_first_frame() {
+        for visualizer in [
+            LiveVisualizer::TvStatic,
+            LiveVisualizer::Volume,
+            LiveVisualizer::Radial,
+            LiveVisualizer::Splat,
+            LiveVisualizer::Race,
+            LiveVisualizer::QuaternionTest,
+            LiveVisualizer::QuaternionMultiTest,
+        ] {
+            let first_runtime = render_dome_visualizer(
+                visualizer,
+                VisualizerInput {
+                    animation_frame: 1,
+                    ..VisualizerInput::default()
+                },
+            );
+            let later_runtime = render_dome_visualizer(
+                visualizer,
+                VisualizerInput {
+                    animation_frame: 120,
+                    ..VisualizerInput::default()
+                },
+            );
+            assert_ne!(
+                super::frame_hash(&first_runtime),
+                super::frame_hash(&later_runtime),
+                "{visualizer:?} should animate during live preview"
+            );
+        }
     }
 
     #[test]
