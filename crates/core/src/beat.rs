@@ -47,19 +47,27 @@ pub struct BeatBroadcaster {
 
 impl BeatBroadcaster {
     const TAP_TIMEOUT_MS: u64 = 2_000;
+    const TAP_WINDOW: usize = 4;
     const MADMOM_TIMEOUT_MS: u64 = 2_500;
-    const MADMOM_WINDOW: usize = 8;
+    const MADMOM_WINDOW: usize = 4;
+    const OUTLIER_NUMERATOR: u64 = 3;
+    const OUTLIER_DENOMINATOR: u64 = 2;
 
     /// Add a human tap timestamp.
     pub fn add_tap(&mut self, timestamp_ms: u64) {
-        if self
-            .taps
-            .last()
-            .is_some_and(|last| timestamp_ms.saturating_sub(*last) > Self::TAP_TIMEOUT_MS)
-        {
-            self.taps.clear();
+        if let Some(last) = self.taps.last().copied() {
+            let interval = timestamp_ms.saturating_sub(last);
+            if timestamp_ms <= last
+                || interval > Self::TAP_TIMEOUT_MS
+                || (self.taps.len() >= 3 && self.interval_is_outlier(interval))
+            {
+                self.taps.clear();
+            }
         }
         self.taps.push(timestamp_ms);
+        if self.taps.len() > Self::TAP_WINDOW {
+            self.taps.remove(0);
+        }
         if self.taps.len() >= 3 {
             let intervals: Vec<_> = self.taps.windows(2).map(|pair| pair[1] - pair[0]).collect();
             let average = intervals.iter().sum::<u64>() / intervals.len() as u64;
@@ -80,6 +88,12 @@ impl BeatBroadcaster {
         if let Some(last) = self.madmom_beats.last() {
             let since_last = i128::from(beat_ms) - i128::from(*last);
             if since_last <= 0 || since_last > i128::from(Self::MADMOM_TIMEOUT_MS) {
+                self.madmom_beats.clear();
+            } else if let Ok(interval) = u64::try_from(since_last) {
+                if self.interval_is_outlier(interval) {
+                    self.madmom_beats.clear();
+                }
+            } else {
                 self.madmom_beats.clear();
             }
         }
@@ -103,6 +117,18 @@ impl BeatBroadcaster {
             self.clock = Some(BeatClock::new(median, realtime_anchor_ms));
             self.taps.clear();
         }
+    }
+
+    fn interval_is_outlier(&self, interval_ms: u64) -> bool {
+        let established_tap_window = self.taps.len() >= 3;
+        let established_madmom_window = self.madmom_beats.len() >= 2;
+        if !established_tap_window && !established_madmom_window {
+            return false;
+        }
+        let Some(beat_ms) = self.beat_ms() else {
+            return false;
+        };
+        interval_outside_ratio(interval_ms, beat_ms)
     }
 
     /// Report an Ableton Link tempo update.
@@ -178,6 +204,13 @@ impl BeatBroadcaster {
     }
 }
 
+fn interval_outside_ratio(interval_ms: u64, beat_ms: u64) -> bool {
+    interval_ms.saturating_mul(BeatBroadcaster::OUTLIER_DENOMINATOR)
+        > beat_ms.saturating_mul(BeatBroadcaster::OUTLIER_NUMERATOR)
+        || interval_ms.saturating_mul(BeatBroadcaster::OUTLIER_NUMERATOR)
+            < beat_ms.saturating_mul(BeatBroadcaster::OUTLIER_DENOMINATOR)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BeatBroadcaster, BeatClock};
@@ -215,6 +248,47 @@ mod tests {
         assert!(beat.tap_counter_active(2_100));
         assert_eq!(beat.tap_counter_text(4_100), "Tap");
         assert!(beat.currently_flashed_off(2_250, 1.0));
+    }
+
+    #[test]
+    fn tap_tempo_uses_short_rolling_window() {
+        let mut beat = BeatBroadcaster::default();
+        beat.add_tap(0);
+        beat.add_tap(500);
+        beat.add_tap(1_000);
+        beat.add_tap(1_500);
+        beat.add_tap(2_100);
+
+        assert_eq!(beat.beat_ms(), Some(533));
+    }
+
+    #[test]
+    fn tap_tempo_outlier_starts_fresh_window() {
+        let mut beat = BeatBroadcaster::default();
+        beat.add_tap(0);
+        beat.add_tap(500);
+        beat.add_tap(1_000);
+        assert_eq!(beat.beat_ms(), Some(500));
+
+        beat.add_tap(2_000);
+        assert_eq!(beat.beat_ms(), Some(500));
+        assert_eq!(beat.tap_counter_text(2_000), "1");
+
+        beat.add_tap(3_000);
+        assert_eq!(beat.beat_ms(), Some(500));
+        beat.add_tap(4_000);
+        assert_eq!(beat.beat_ms(), Some(1_000));
+    }
+
+    #[test]
+    fn tap_tempo_zero_interval_resets_window() {
+        let mut beat = BeatBroadcaster::default();
+        beat.add_tap(1_000);
+        beat.add_tap(1_000);
+        beat.add_tap(1_500);
+        beat.add_tap(2_000);
+
+        assert_eq!(beat.beat_ms(), Some(500));
     }
 
     #[test]
@@ -258,6 +332,36 @@ mod tests {
         assert_eq!(beat.beat_ms(), Some(500));
         beat.report_madmom_beat(5_250, 5_250);
         assert_eq!(beat.beat_ms(), Some(250));
+    }
+
+    #[test]
+    fn madmom_uses_short_rolling_window() {
+        let mut beat = BeatBroadcaster::default();
+        beat.report_madmom_beat(1_000, 1_000);
+        beat.report_madmom_beat(1_400, 1_400);
+        beat.report_madmom_beat(1_800, 1_800);
+        beat.report_madmom_beat(2_200, 2_200);
+        beat.report_madmom_beat(2_650, 2_650);
+
+        assert_eq!(beat.beat_ms(), Some(400));
+
+        beat.report_madmom_beat(3_100, 3_100);
+        assert_eq!(beat.beat_ms(), Some(450));
+    }
+
+    #[test]
+    fn madmom_outlier_starts_fresh_window() {
+        let mut beat = BeatBroadcaster::default();
+        beat.report_madmom_beat(1_000, 1_000);
+        beat.report_madmom_beat(1_400, 1_400);
+        beat.report_madmom_beat(1_800, 1_800);
+        assert_eq!(beat.beat_ms(), Some(400));
+
+        beat.report_madmom_beat(2_800, 2_800);
+        assert_eq!(beat.beat_ms(), Some(400));
+
+        beat.report_madmom_beat(3_800, 3_800);
+        assert_eq!(beat.beat_ms(), Some(1_000));
     }
 
     #[test]
