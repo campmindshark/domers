@@ -36,7 +36,7 @@ checkout is not next to `domers`.
 Start the operator server with the checked example config:
 
 ```sh
-cargo run --bin domers -- run --config examples/domers.toml --bind 127.0.0.1:3000
+make run
 ```
 
 Open `http://127.0.0.1:3000` and use **MindShark Dome Control Panel**.
@@ -58,7 +58,7 @@ opc_address = "192.168.1.70:7890"
 Check config, bind address, OPC address syntax, and Madmom command availability before starting output:
 
 ```sh
-cargo run --bin domers -- doctor --config domers.toml --bind 127.0.0.1:3000
+make doctor CONFIG=domers.toml
 ```
 
 Then start with the same config, click `Start`, and check the fixed **Runtime Status** footer on the controls page. It shows each configured target address, enabled state, TCP connection state, successful frame count, input adapter status, MIDI level-driver values, orientation devices, and the last connection/write error.
@@ -74,9 +74,7 @@ cp examples/domers.toml domers.toml
 Import an existing Spectrum XML config:
 
 ```sh
-cargo run --bin domers -- import-spectrum-xml \
-  fixtures/config/spectrum_default_config.xml \
-  domers.toml
+make import SPECTRUM_XML=fixtures/config/spectrum_default_config.xml OUTPUT_CONFIG=domers.toml
 ```
 
 See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette format, and import behavior.
@@ -103,13 +101,13 @@ See [docs/configuration.md](docs/configuration.md) for the TOML schema, palette 
 ## Development
 
 ```sh
-tools/install_dev_deps.sh --check
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cd ui && bun install && bun run build && cd ..
-node ui/check.mjs
+make deps-check
+make build
+make test
+make lint
 ```
+
+Run `make help` for all build, run, test, lint, import, and release targets.
 
 ## Crates
 

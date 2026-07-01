@@ -793,7 +793,9 @@ fn radial_frame(input: VisualizerInput) -> Vec<Rgb> {
     reason = "Splat preview clamps normalized brightness before RGB scaling"
 )]
 fn splat_frame(input: VisualizerInput) -> Vec<Rgb> {
-    let adjusted_level = f64::from(input.volume.clamp(0.0, 1.0)).sqrt().clamp(0.1, 1.0);
+    let adjusted_level = f64::from(input.volume.clamp(0.0, 1.0))
+        .sqrt()
+        .clamp(0.1, 1.0);
     let points = DOME_LED_POINTS.get_or_init(build_dome_led_points);
     let splats = [
         Splat {
@@ -972,8 +974,7 @@ impl Quaternion {
     }
 
     fn normalize(self) -> Self {
-        let length =
-            (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt();
+        let length = (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt();
         if length <= f64::EPSILON {
             return Self {
                 x: 0.0,
@@ -1019,8 +1020,8 @@ fn idle_paintbrush_orientation(input: VisualizerInput) -> Quaternion {
         * (0.18 * speed * time + 0.08 * (0.73 * time).sin() + 0.03 * (1.91 * time).sin());
     let pitch = std::f64::consts::TAU
         * (-0.25 + 0.10 * (0.47 * time + 0.4).sin() + 0.035 * (1.37 * time).cos());
-    let roll = std::f64::consts::TAU
-        * (0.11 * (0.31 * time + 1.7).sin() + 0.05 * (1.13 * time).sin());
+    let roll =
+        std::f64::consts::TAU * (0.11 * (0.31 * time + 1.7).sin() + 0.05 * (1.13 * time).sin());
     Quaternion::from_yaw_pitch_roll(yaw, pitch, roll)
 }
 
