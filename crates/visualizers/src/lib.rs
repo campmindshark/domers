@@ -6,6 +6,13 @@ use domers_outputs::{
     topology::{DOME_PIXELS, DOME_STRUTS, STAGE_LAYERS},
     BarCommand, DomeCommand, DomeOutputSink, StageCommand,
 };
+use serde::Deserialize;
+use std::sync::OnceLock;
+
+const DOME_GEOMETRY_JSON: &str =
+    include_str!("../../../fixtures/spectrum-csharp/dome_geometry.json");
+const DOME_MAPPING_JSON: &str = include_str!("../../../fixtures/spectrum-csharp/dome_mapping.json");
+static DOME_LED_POINTS: OnceLock<Vec<DomeLedPoint>> = OnceLock::new();
 
 /// Porting classification for a Spectrum visualizer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -607,6 +614,10 @@ fn stage_flash_colors(input: DiagnosticInput, side_lengths: &[usize]) -> Vec<Sta
     clippy::cast_precision_loss,
     reason = "Stage preview converts small fixture indices into normalized animation positions"
 )]
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "Stage visualizer input is assembled per frame and kept by value with other renderer inputs"
+)]
 fn stage_depth_level(input: StageVisualizerInput, side_lengths: &[usize]) -> Vec<StageCommand> {
     let mut commands = Vec::new();
     let diagnostic = input.diagnostic;
@@ -689,6 +700,10 @@ fn stage_second_part(side_index: usize) -> bool {
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
     reason = "Visualizer color focus uses normalized LED counters before RGB scaling"
+)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Mirrors Spectrum's gradient calculation inputs without hiding state in a temporary struct"
 )]
 fn stage_gradient_color(
     palette: &ColorPalette,
@@ -817,14 +832,214 @@ fn quaternion_multi_test_frame(_input: VisualizerInput) -> Vec<Rgb> {
 }
 
 fn quaternion_paintbrush_frame(input: VisualizerInput) -> Vec<Rgb> {
-    let offset = phase_offset(input.beat_progress);
-    preview_frame(|index| {
-        if (index + offset) % 13 < 6 {
-            input.palette[(index / 13 + 2) % input.palette.len()]
-        } else {
-            Rgb::BLACK
+    // Spectrum's paintbrush is a quaternion-driven metaball over the dome
+    // projection. With no live orientation device, it idles by sweeping a
+    // virtual pointer; use beat phase as that deterministic idle orientation.
+    let yaw = input.beat_progress.rem_euclid(1.0) * std::f64::consts::TAU;
+    let pitch = -0.25 * std::f64::consts::TAU;
+    let threshold_factor = 0.25 + f64::from(input.volume.clamp(0.0, 1.0)) + 0.01;
+    let threshold = 2.0 / threshold_factor;
+    let saturation = (1.3 / f64::from(input.volume.max(0.01)) - 1.0).clamp(0.2, 1.0);
+    let contour_counter = (4.0 * f64::from(input.volume) * 100.0 * input.beat_progress) % 100.0;
+
+    DOME_LED_POINTS
+        .get_or_init(build_dome_led_points)
+        .iter()
+        .map(|point| {
+            let (x, y, z) = hemisphere_point(point.x, point.y);
+            let (rx, ry, rz) = rotate_yaw_pitch(x, y, z, yaw, pitch);
+            let distance = distance3(rx, ry, rz, -1.0, 0.0, 0.0).max(0.001);
+            let neg_distance = distance3(rx, ry, rz, 1.0, 0.0, 0.0).max(0.001);
+            let potential = 1.0 / (distance * neg_distance);
+            let strength = potential - threshold;
+            let hue = (1.0 + yaw.cos()) / 2.0;
+
+            let mut color = Rgb::BLACK;
+            if strength > 0.0 {
+                color = hsv_to_rgb(hue, saturation, 1.0);
+            }
+
+            let potential_contours =
+                (1000.0 * (potential - 0.5)).max(0.001).ln() + contour_counter / 100.0;
+            let contour_value = potential_contours - potential_contours.trunc();
+            if contour_value < 0.2 {
+                let bracket = potential_contours.trunc();
+                let value = 0.8 - (1.0 - bracket / 10.0).clamp(0.0, 0.8);
+                color = light_paint(color, hsv_to_rgb(hue, 0.4, value.clamp(0.0, 1.0)));
+            }
+
+            // Keep the operator palette present in this port: the metaball
+            // drives shape/brightness while the active palette colors tint dim
+            // regions so the mode still responds to palette selection.
+            if color == Rgb::BLACK && (point.index + phase_offset(input.beat_progress)) % 97 < 8 {
+                input.palette[(point.index / 377) % input.palette.len()].scale(0.18)
+            } else {
+                color
+            }
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DomeLedPoint {
+    index: usize,
+    x: f64,
+    y: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct DomeGeometryFixture {
+    hand_drawn_points: Vec<GeometryPoint>,
+    lines: Vec<GeometryLine>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeometryPoint {
+    normalized_x: f64,
+    normalized_y: f64,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeometryLine {
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct DomeMappingFixture {
+    control_box_strut_order: Vec<Vec<String>>,
+    strut_lengths: std::collections::HashMap<String, usize>,
+    strut_positions: Vec<StrutPosition>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StrutPosition {
+    control_box_strut_index: usize,
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "Dome fixture LED counts are small and converted only for normalized interpolation"
+)]
+fn build_dome_led_points() -> Vec<DomeLedPoint> {
+    let geometry: DomeGeometryFixture =
+        serde_json::from_str(DOME_GEOMETRY_JSON).expect("dome geometry fixture is valid");
+    let mapping: DomeMappingFixture =
+        serde_json::from_str(DOME_MAPPING_JSON).expect("dome mapping fixture is valid");
+    let mut points = Vec::with_capacity(DOME_PIXELS);
+    for (strut_index, line) in geometry.lines.iter().enumerate() {
+        let Some(start) = geometry.hand_drawn_points.get(line.start) else {
+            continue;
+        };
+        let Some(end) = geometry.hand_drawn_points.get(line.end) else {
+            continue;
+        };
+        let leds = mapping
+            .strut_positions
+            .get(strut_index)
+            .map_or(0, |position| {
+                mapping.strut_length(position.control_box_strut_index)
+            });
+        for led_index in 0..leds {
+            let d = (led_index + 1) as f64 / (leds + 2) as f64;
+            points.push(DomeLedPoint {
+                index: points.len(),
+                x: (end.normalized_x - start.normalized_x).mul_add(d, start.normalized_x),
+                y: (end.normalized_y - start.normalized_y).mul_add(d, start.normalized_y),
+            });
         }
-    })
+    }
+    points.resize(
+        DOME_PIXELS,
+        DomeLedPoint {
+            index: 0,
+            x: 0.5,
+            y: 0.5,
+        },
+    );
+    for (index, point) in points.iter_mut().enumerate() {
+        point.index = index;
+    }
+    points
+}
+
+impl DomeMappingFixture {
+    fn strut_length(&self, control_box_strut_index: usize) -> usize {
+        let mut struts_left = control_box_strut_index;
+        for strand in &self.control_box_strut_order {
+            if strand.len() <= struts_left {
+                struts_left -= strand.len();
+                continue;
+            }
+            return self.strut_lengths[&strand[struts_left]];
+        }
+        0
+    }
+}
+
+fn hemisphere_point(normalized_x: f64, normalized_y: f64) -> (f64, f64, f64) {
+    let x = 2.0 * normalized_x - 1.0;
+    let y = 1.0 - 2.0 * normalized_y;
+    let z = if x.mul_add(x, y * y) > 1.0 {
+        0.0
+    } else {
+        (1.0 - x * x - y * y).sqrt()
+    };
+    (x, y, z)
+}
+
+fn rotate_yaw_pitch(x: f64, y: f64, z: f64, yaw: f64, pitch: f64) -> (f64, f64, f64) {
+    let (sin_yaw, cos_yaw) = yaw.sin_cos();
+    let yawed_x = x * cos_yaw + z * sin_yaw;
+    let yawed_z = -x * sin_yaw + z * cos_yaw;
+    let (sin_pitch, cos_pitch) = pitch.sin_cos();
+    (
+        yawed_x,
+        y * cos_pitch - yawed_z * sin_pitch,
+        y * sin_pitch + yawed_z * cos_pitch,
+    )
+}
+
+fn distance3(ax: f64, ay: f64, az: f64, bx: f64, by: f64, bz: f64) -> f64 {
+    ((ax - bx).powi(2) + (ay - by).powi(2) + (az - bz).powi(2)).sqrt()
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::many_single_char_names,
+    reason = "HSV channels are clamped before conversion to RGB bytes"
+)]
+fn hsv_to_rgb(hue: f64, saturation: f64, value: f64) -> Rgb {
+    let h = hue.rem_euclid(1.0) * 6.0;
+    let i = h.floor() as i32;
+    let f = h - f64::from(i);
+    let value = value.clamp(0.0, 1.0);
+    let saturation = saturation.clamp(0.0, 1.0);
+    let p = value * (1.0 - saturation);
+    let q = value * (1.0 - f * saturation);
+    let t = value * (1.0 - (1.0 - f) * saturation);
+    let (r, g, b) = match i.rem_euclid(6) {
+        0 => (value, t, p),
+        1 => (q, value, p),
+        2 => (p, value, t),
+        3 => (p, q, value),
+        4 => (t, p, value),
+        _ => (value, p, q),
+    };
+    Rgb {
+        r: (255.0 * r) as u8,
+        g: (255.0 * g) as u8,
+        b: (255.0 * b) as u8,
+    }
+}
+
+fn light_paint(base: Rgb, paint: Rgb) -> Rgb {
+    if paint.r.max(paint.g).max(paint.b) > base.r.max(base.g).max(base.b) {
+        paint
+    } else {
+        base
+    }
 }
 
 fn preview_frame(mut color_for_index: impl FnMut(usize) -> Rgb) -> Vec<Rgb> {
@@ -1303,7 +1518,7 @@ mod tests {
             ),
             (
                 LiveVisualizer::QuaternionPaintbrush,
-                6_740_275_545_131_552_642,
+                9_872_828_698_301_197_742,
             ),
         ];
         let actual: Vec<_> = cases

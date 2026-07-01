@@ -74,17 +74,30 @@ fn validate_madmom_command(config: &DomersConfig) -> Result<(), Box<dyn Error>> 
         command: config.madmom.command.clone(),
         tracker: config.madmom.tracker.clone(),
         audio_input_index: config.madmom.audio_input_index,
-    };
+    }
+    .resolve();
     let mut command = Command::new(&launch.command);
     if let Some(working_directory) = launch.working_directory() {
         command.current_dir(working_directory);
     }
+    if let Some(python_path) = launch.python_path() {
+        command.env("PYTHONPATH", python_path);
+    }
     if let Some(tracker) = &launch.tracker {
         command.arg(tracker);
     }
-    let status = command.arg("--help").status();
-    match status {
-        Ok(_) => Ok(()),
+    let output = command.arg("--help").output();
+    match output {
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            Err(format!(
+                "Madmom command '{}' exited with status {}.\nstdout: {}\nstderr: {}",
+                launch.command, output.status, stdout, stderr
+            )
+            .into())
+        }
         Err(error) => Err(format!(
             "Madmom command '{}' is not runnable with args {:?}: {error}",
             launch.command,

@@ -838,7 +838,9 @@ impl ServerState {
 
     #[cfg(test)]
     fn set_now_ms_for_test(&mut self, now_ms: u64) {
-        self.input_epoch = Instant::now() - Duration::from_millis(now_ms);
+        self.input_epoch = Instant::now()
+            .checked_sub(Duration::from_millis(now_ms))
+            .expect("test time offset fits in Instant range");
     }
 
     fn prune_input_state(&mut self) {
@@ -1803,10 +1805,14 @@ fn spawn_madmom_task(state: Arc<Mutex<ServerState>>, config: DomersConfig) -> Jo
             command: config.madmom.command,
             tracker: config.madmom.tracker,
             audio_input_index,
-        };
+        }
+        .resolve();
         let mut command = Command::new(&launch.command);
         if let Some(working_directory) = launch.working_directory() {
             command.current_dir(working_directory);
+        }
+        if let Some(python_path) = launch.python_path() {
+            command.env("PYTHONPATH", python_path);
         }
         let mut child = match command
             .args(launch.args())
@@ -1849,11 +1855,20 @@ fn spawn_madmom_task(state: Arc<Mutex<ServerState>>, config: DomersConfig) -> Jo
                 }
             }
         }
-        if let Err(error) = child.wait().await {
-            state
-                .lock()
-                .await
-                .record_input_adapter_error(InputAdapter::Madmom, error.to_string());
+        match child.wait().await {
+            Ok(status) if status.success() => {}
+            Ok(status) => {
+                state.lock().await.record_input_adapter_error(
+                    InputAdapter::Madmom,
+                    format!("Madmom exited with status {status}"),
+                );
+            }
+            Err(error) => {
+                state
+                    .lock()
+                    .await
+                    .record_input_adapter_error(InputAdapter::Madmom, error.to_string());
+            }
         }
     })
 }
@@ -2877,6 +2892,7 @@ mod tests {
             let _ = state.simulator_frame();
         }
 
+        state.set_now_ms_for_test(1_250);
         let after = state.snapshot().inputs.beat_progress;
         assert_eq!(state.metrics().frames, 0);
         assert_eq!(state.metrics().simulator_frames, 10);

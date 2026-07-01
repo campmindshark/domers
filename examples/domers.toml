@@ -402,7 +402,6 @@ command = "DBNBeatTracker"
 
 [carabiner]
 command = "carabiner"
-args = ["--stdout-tempo"]
 human_link_output = false
 madmom_link_output = false
 

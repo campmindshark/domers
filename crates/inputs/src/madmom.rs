@@ -1,7 +1,7 @@
 //! Madmom sidecar protocol helpers.
 
 use std::{
-    io,
+    env, io,
     path::{Path, PathBuf},
     process::{Child, ChildStdout, Command, Stdio},
 };
@@ -18,6 +18,42 @@ pub struct MadmomLaunchConfig {
 }
 
 impl MadmomLaunchConfig {
+    /// Resolve common bundled/sibling Madmom paths while preserving explicit commands.
+    ///
+    /// This lets a `command = "DBNBeatTracker"` config work when the Spectrum
+    /// Madmom checkout sits next to `domers`, which is the local development
+    /// layout, without requiring operators to install `DBNBeatTracker` globally.
+    #[must_use]
+    pub fn resolve(&self) -> Self {
+        env::current_dir().map_or_else(|_| self.clone(), |base| self.resolve_from(&base))
+    }
+
+    /// Resolve from a known base directory.
+    #[must_use]
+    pub fn resolve_from(&self, base: &Path) -> Self {
+        let command = Path::new(&self.command);
+        if command.components().count() > 1 || command.exists() || self.command != "DBNBeatTracker"
+        {
+            return self.clone();
+        }
+
+        let parent = base.parent().unwrap_or(base);
+        for candidate in [
+            base.join("Madmom/bin/DBNBeatTracker"),
+            parent.join("Madmom/bin/DBNBeatTracker"),
+            base.join("spectrum/Madmom/bin/DBNBeatTracker"),
+            parent.join("spectrum/Madmom/bin/DBNBeatTracker"),
+        ] {
+            if candidate.exists() {
+                let mut resolved = self.clone();
+                resolved.command = candidate.to_string_lossy().to_string();
+                return resolved;
+            }
+        }
+
+        self.clone()
+    }
+
     /// Return the Spectrum-compatible command arguments.
     #[must_use]
     pub fn args(&self) -> Vec<String> {
@@ -52,6 +88,20 @@ impl MadmomLaunchConfig {
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .map(Path::to_path_buf)
+    }
+
+    /// Return a PYTHONPATH entry for source-tree Madmom launches.
+    #[must_use]
+    pub fn python_path(&self) -> Option<PathBuf> {
+        let command = Path::new(&self.command);
+        let file_name = command.file_name()?.to_string_lossy();
+        if file_name != "DBNBeatTracker" && file_name != "TorchBeatTracker" {
+            return None;
+        }
+        let bin_dir = command.parent()?;
+        (bin_dir.file_name()?.to_string_lossy() == "bin")
+            .then(|| bin_dir.parent().map(Path::to_path_buf))
+            .flatten()
     }
 }
 
@@ -96,6 +146,9 @@ impl MadmomSidecar {
         let mut command = Command::new(&launch.command);
         if let Some(working_directory) = launch.working_directory() {
             command.current_dir(working_directory);
+        }
+        if let Some(python_path) = launch.python_path() {
+            command.env("PYTHONPATH", python_path);
         }
         command
             .args(launch.args())
@@ -144,6 +197,8 @@ pub fn parse_beat_line(line: &str) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::{parse_beat_line, MadmomLaunchConfig, MadmomSidecar};
 
     #[test]
@@ -209,6 +264,31 @@ mod tests {
         };
 
         assert_eq!(config.working_directory(), None);
+    }
+
+    #[test]
+    fn dbn_beat_tracker_resolves_from_sibling_spectrum_checkout() {
+        let root =
+            std::env::temp_dir().join(format!("domers-madmom-resolve-{}", std::process::id()));
+        let tracker = root.join("spectrum/Madmom/bin/DBNBeatTracker");
+        fs::create_dir_all(tracker.parent().expect("tracker has parent")).expect("mkdir");
+        fs::write(&tracker, "#!/usr/bin/env python\n").expect("write tracker");
+
+        let config = MadmomLaunchConfig {
+            command: "DBNBeatTracker".to_string(),
+            tracker: None,
+            audio_input_index: None,
+        };
+        let domers_dir = root.join("domers");
+        let resolved = config.resolve_from(&domers_dir);
+
+        assert_eq!(resolved.command, tracker.to_string_lossy().as_ref());
+        let madmom_root = root.join("spectrum/Madmom");
+        assert_eq!(
+            resolved.python_path().as_deref(),
+            Some(madmom_root.as_path())
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
