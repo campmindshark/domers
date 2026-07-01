@@ -3541,10 +3541,14 @@ mod tests {
         }
         assert_eq!(manifest.matches("\"kind\": \"frame_sequence_hashes\"").count(), 11);
         assert_eq!(manifest.matches("\"input_sequence\"").count(), 11);
-        assert_eq!(
-            manifest.matches("\"status\": \"pending_csharp_execution\"").count(),
-            11
-        );
+        // Sequence goldens are captured incrementally, so the split between
+        // captured and still-pending cases shifts over time; only the total
+        // must stay complete.
+        let captured = manifest.matches("\"status\": \"captured\"").count();
+        let pending = manifest
+            .matches("\"status\": \"pending_csharp_execution\"")
+            .count();
+        assert_eq!(captured + pending, 11);
     }
 
     #[test]
