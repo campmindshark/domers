@@ -63,8 +63,7 @@ impl PaletteEntry {
             raw_distance.min(1.0 - raw_distance) * 2.0
         } else {
             raw_distance
-        }
-        .clamp(0.0, 1.0);
+        };
 
         blend_spectrum(
             Rgb::from_u24(self.color1),
@@ -192,10 +191,19 @@ impl Rgb {
 fn blend_spectrum(color1: Rgb, color2: Rgb, distance: f64) -> Rgb {
     let inverse = 1.0 - distance;
     Rgb {
-        r: (distance * f64::from(color1.r) + inverse * f64::from(color2.r)) as u8,
-        g: (distance * f64::from(color1.g) + inverse * f64::from(color2.g)) as u8,
-        b: (distance * f64::from(color1.b) + inverse * f64::from(color2.b)) as u8,
+        r: csharp_byte(distance * f64::from(color1.r) + inverse * f64::from(color2.r)),
+        g: csharp_byte(distance * f64::from(color1.g) + inverse * f64::from(color2.g)),
+        b: csharp_byte(distance * f64::from(color1.b) + inverse * f64::from(color2.b)),
     }
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Spectrum casts blended doubles through int to byte with unchecked wrapping"
+)]
+fn csharp_byte(value: f64) -> u8 {
+    value as i32 as u8
 }
 
 #[cfg(test)]
@@ -246,6 +254,18 @@ mod tests {
         assert_eq!(
             palette.gradient_color(0, 0, 0.5, 0.0, false).to_u24(),
             0x7f_00_7f
+        );
+    }
+
+    #[test]
+    fn wrapped_gradient_preserves_spectrum_byte_overflow() {
+        let palette = ColorPalette {
+            colors: vec![PaletteEntry::gradient(0x00_00_00, 0xf0_f0_ff)],
+        };
+
+        assert_eq!(
+            palette.gradient_color(0, 0, 1.25, 0.0, true).to_u24(),
+            0x68_68_7e
         );
     }
 }

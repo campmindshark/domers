@@ -17,28 +17,32 @@ and hardware output. Physical hardware acceptance is tracked separately.
 | --- | --- | --- |
 | Visualizer inventory | 17 used Spectrum visualizer names are tracked and dispatched. | Keep `INVENTORY` and `fixtures/spectrum-csharp/visualizer_frame_cases.json` in lockstep. |
 | Visualizer frame parity | All 17 tracked cases have headless Spectrum C# frame hashes in `visualizer_frame_cases.json`; the manifest requires a concrete expected value for every case. | Rust-rendered hashes match the captured Spectrum hashes, or a mismatch is recorded as an intentional deviation. |
-| Dome visualizer algorithms | Renderers are wired for all used dome modes and consume full active palette banks. Race, Splat, Snakes, Quaternion Test, TV Static, and Stage Depth now match their Spectrum frame goldens. | Volume, Radial, Quaternion Paintbrush, and Flash match Spectrum frame goldens or documented deviations. |
+| Dome visualizer algorithms | Renderers are wired for all used dome modes and consume full active palette banks. All captured Spectrum C# visualizer frame goldens now match the Rust renderer. | Runtime-rich stateful effects stay covered by focused simulator and visual checks. |
 | Diagnostics | Dome/bar/stage diagnostics are wired. | C# frame goldens plus physical dome/bar/stage diagnostic sign-off. |
 | Audio input | UDP volume bridge, native CPAL capture behind the `native-capture` build feature, Spectrum audio device identity, all-endpoint index mapping, XML import, audio level-driver preset/channel import, and Madmom audio-index derivation are covered. | Physical show-device sign-off validates real capture devices and levels. |
 | MIDI input | UDP command transport and native midir capture behind the `native-capture` build feature feed device-scoped state, configurable wildcard/exact bindings, runtime actions, knob/note defaults, Spectrum knob math, ADSR level-driver bindings, and a MIDI log. | Physical controller discovery/sign-off remains hardware acceptance. |
 | Orientation input | Datagram parsing, device map, quaternion state, calibration, action flags, poi speed, and stale-device removal are implemented. | Visualizer-specific orientation frame equivalence remains tied to visualizer parity. |
 | Madmom | Launch args support wrapper, Spectrum-style Python working directory, async child ingestion, derived audio input indexes, and fake-sidecar tests are covered. | Shipping a bundled Madmom distribution is release packaging; runtime behavior is no-hardware tested. |
-| Beat timing | Wall-clock tap tempo with duplicate touch/click filtering, BPM string, tap counter, reset, Madmom median/backwards reset, Link/Carabiner sidecar tempo ingestion, and Spectrum truncating progress math are covered. | Packaged macOS/Linux Link sidecar remains release integration work. |
+| Beat timing | Wall-clock tap tempo with duplicate touch/click filtering, BPM string, tap counter, reset, Madmom median/backwards reset, DJ Link/Carabiner sidecar tempo ingestion, and Spectrum truncating progress math are covered. | Packaged macOS/Linux DJ Link sidecar remains release integration work. |
 | Operator UI | Browser shell has structured input/tempo/Madmom and output/layout config controls, full config editor, full palette editor, input status, MIDI log, orientation calibration, debug visuals, preview, and no-hardware HTTP route coverage for operator flows. | Browser screenshots remain release evidence, not feature parity deferral. |
 | Simulators | The live preview shows hardware-bound output only and drives visualizer animation at the emitted preview cadence, not the 400 Hz engine compute cadence. The isolated simulator exposes animation/testing controls, including yaw/pitch/roll overrides, plus dome/bar/stage command previews. | Exact visual artwork remains visualizer/UI polish, not first-version parity. |
 | Hardware output | OPC mapping/write/reconnect loopback tests pass. | Physical dome, bar, stage, inputs, and reconnect sign-off are intentionally deferred. |
 
 ## Open TODOs
 
-- Visualizer exactness: 3 captured Spectrum C# goldens still differ from the
-  Rust renderer: `LEDDomeVolumeVisualizer`, `LEDDomeRadialVisualizer`, and
-  `LEDDomeQuaternionPaintbrushVisualizer`.
+- Visualizer exactness is closed for the captured Spectrum C# frame manifest:
+  `rust_visualizer_hashes_match_spectrum_csharp_goldens` now passes.
 - Simulator/animation cadence is aligned closer to Spectrum: live preview and
   operator rendering now feed visualizers a preview-rate animation counter
-  instead of the 400 Hz engine compute counter.
-- Quaternion Paintbrush randomness is closer to Spectrum: idle orientation now
-  replays the same seeded `Random(0)` nudge integration order that Spectrum uses
-  for yaw, roll, and pitch momentum, though full frame exactness remains open.
+  instead of the 400 Hz engine compute counter, and no-input runtime preview no
+  longer invents wall-clock beat/volume animation before tap, Madmom, or DJ Link
+  sets tempo.
+- Volume and Radial exactness are closed for the captured frames: Volume now
+  emits Spectrum-style per-pixel strut-layout commands, and Radial uses the
+  Spectrum gradient overflow behavior needed by the captured frame.
+- Quaternion Paintbrush exactness is closed for the captured first frame: Rust
+  now uses the idle seeded `Random(0)` nudge integration and no longer adds
+  Rust-only palette tint/contour overlays when Spectrum's contours are disabled.
 - Race exactness is closed: Rust now emits Spectrum-style per-pixel racer
   commands from the captured first frame, including FadeExp and Multi coloring
   behavior.
@@ -55,10 +59,7 @@ and hardware output. Physical hardware acceptance is tracked separately.
 ## Required Gates
 
 ```sh
-cargo test --workspace
-node ui/check.mjs
-cargo clippy --workspace --all-targets -- -D warnings
-python3 tools/check_visualizer_goldens.py
+make e2e
 ```
 
 Refresh visualizer goldens with:

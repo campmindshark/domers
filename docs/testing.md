@@ -5,12 +5,7 @@ The automated suite covers deterministic runtime behavior, protocol encoding, co
 ## PR Fast
 
 ```sh
-tools/install_dev_deps.sh --check
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cd ui && bun install && bun run build && cd ..
-node ui/check.mjs
+make e2e
 ```
 
 ## Covered
@@ -40,17 +35,13 @@ replacement decisions stay visible.
 ## Example Local Run
 
 ```sh
-tools/install_dev_deps.sh --check
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cd ui && bun install && bun run build && cd ..
-node ui/check.mjs
+make e2e
 ```
 
 Live local smoke:
 
 ```sh
-cargo run --bin domers -- run --config examples/domers.toml --bind 127.0.0.1:3000
+make run CONFIG=examples/domers.toml BIND=127.0.0.1:3000
 ```
 
 Preflight the same config without starting outputs:
@@ -81,8 +72,7 @@ when you only want the apt packages.
 ```sh
 python3 tools/build_spectrum_csharp.py
 python3 tools/capture_spectrum_visualizer_frames.py
-python3 tools/check_visualizer_goldens.py
-cargo test -p domers-visualizers rust_visualizer_hashes_match_spectrum_csharp_goldens -- --ignored --nocapture
+make test-parity
 ```
 
 `build_spectrum_csharp.py` is the Windows/.NET gate for executable Spectrum
@@ -91,10 +81,9 @@ builds `../spectrum/Spectrum/Spectrum.csproj` directly because the legacy
 solution's `Madmom/Madmom.pyproj` requires Visual Studio Python Tools.
 `capture_spectrum_visualizer_frames.py` executes the old Spectrum visualizers
 headlessly with simulation-only output, and `check_visualizer_goldens.py` ensures
-all captured hashes are present. The ignored Rust-vs-Spectrum test is the active
-exactness ledger for the remaining live dome visualizer mismatches; Stage Depth
-now matches its captured Spectrum golden, and simulator animation now uses the
-preview-rate visualizer counter instead of the 400 Hz engine compute counter.
+all captured hashes are present. The Rust-vs-Spectrum visualizer hash test now
+passes for the captured manifest; simulator animation uses the 10 ms
+Spectrum-compatible preview counter instead of the 400 Hz engine compute counter.
 
 Browser screenshots, load tests, and physical hardware sign-off artifacts are release evidence, not prerequisites for the no-hardware test suite.
 

@@ -301,10 +301,13 @@ pub fn render_dome_visualizer(
     if visualizer == LiveVisualizer::Race {
         return race_commands(input);
     }
+    if visualizer == LiveVisualizer::Volume {
+        return volume_commands(input);
+    }
     let mut sink = DomeOutputSink::new(false, true);
     sink.write_buffer(match visualizer {
         LiveVisualizer::TvStatic => unreachable!("TV Static writes Spectrum-style pixel commands"),
-        LiveVisualizer::Volume => volume_frame(input),
+        LiveVisualizer::Volume => unreachable!("Volume writes Spectrum-style pixel commands"),
         LiveVisualizer::Flash => unreachable!("Flash visualizer is event-driven"),
         LiveVisualizer::Radial => radial_frame(input),
         LiveVisualizer::Splat => splat_frame(input),
@@ -893,16 +896,583 @@ fn bar_segment(index: usize, infinity_width: usize, infinity_length: usize) -> u
     }
 }
 
-fn volume_frame(input: VisualizerInput) -> Vec<Rgb> {
-    let lit = lit_count(input.volume);
-    preview_frame(|index| {
-        if index <= lit {
-            input.palette[(index / 233) % 4].scale(input.volume)
+const VOLUME_ANIMATION_SIZE: usize = 4;
+const VOLUME_ROTATION_SPEED: f64 = 0.25;
+const VOLUME_GRADIENT_SPEED: f64 = 0.25;
+const VOLUME_STARTING_POINTS: [usize; 6] = [22, 26, 30, 34, 38, 70];
+
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::float_cmp,
+    reason = "Volume port mirrors Spectrum's small integer layout ratios and exact filled-section checks"
+)]
+fn volume_commands(input: VisualizerInput) -> Vec<DomeCommand> {
+    let beat_progress = if input.animation_frame == 0 {
+        0.0
+    } else {
+        input.beat_progress
+    };
+    let layouts = volume_layouts(volume_center_offset(beat_progress));
+    let total_parts = VOLUME_ANIMATION_SIZE;
+    let volume_split_into = 2 * ((total_parts - 1) / 2 + 1);
+    let level = f64::from(input.volume.clamp(0.0, 1.0));
+    let gradient_focus = progress_through_beat(beat_progress, VOLUME_GRADIENT_SPEED);
+    let mut commands = if input.animation_frame == 0 {
+        volume_wipe_commands()
+    } else {
+        Vec::new()
+    };
+
+    for part in (0..total_parts).step_by(2) {
+        let start_range = part as f64 / volume_split_into as f64;
+        let end_range = (part + 2) as f64 / volume_split_into as f64;
+        let scaled = if end_range == start_range {
+            0.0
         } else {
-            Rgb::from_u24(0x02_02_02)
+            ((level - start_range) / (end_range - start_range)).clamp(0.0, 1.0)
+        };
+        let start_lit_range = if level == 0.0 {
+            1.0
+        } else {
+            (start_range / level).min(1.0)
+        };
+        let end_lit_range = if level == 0.0 {
+            1.0
+        } else {
+            (end_range / level).min(1.0)
+        };
+
+        for strut in &layouts.part.segments[part].struts {
+            update_volume_strut(
+                &mut commands,
+                &layouts.part,
+                input,
+                *strut,
+                scaled,
+                start_lit_range,
+                end_lit_range,
+                gradient_focus,
+            );
         }
-    })
+
+        if part + 1 == total_parts {
+            break;
+        }
+
+        for section_index in 0..6 {
+            let segment = &layouts.section.segments[section_index + part * 3];
+            let gradient_step = 1.0 / segment.struts.len() as f64;
+            let mut gradient_start_pos = 0.0;
+            for strut in &segment.struts {
+                let gradient_end_pos = gradient_start_pos + gradient_step;
+                update_volume_strut(
+                    &mut commands,
+                    &layouts.part,
+                    input,
+                    *strut,
+                    if scaled == 1.0 { 1.0 } else { 0.0 },
+                    gradient_start_pos,
+                    gradient_end_pos,
+                    gradient_focus,
+                );
+                gradient_start_pos = gradient_end_pos;
+            }
+        }
+    }
+
+    commands.push(DomeCommand::Flush);
+    commands
 }
+
+fn volume_wipe_commands() -> Vec<DomeCommand> {
+    let mut commands = Vec::with_capacity(DOME_PIXELS);
+    for strut_index in 0..DOME_STRUTS {
+        let Some(length) = dome_strut_length(strut_index) else {
+            continue;
+        };
+        for led_index in 0..length {
+            commands.push(DomeCommand::Pixel {
+                strut_index,
+                led_index,
+                color: Rgb::BLACK,
+            });
+        }
+    }
+    commands
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Mirrors Spectrum LEDDomeVolumeVisualizer.UpdateStrut without hiding the layout inputs"
+)]
+fn update_volume_strut(
+    commands: &mut Vec<DomeCommand>,
+    part_layout: &VolumeStrutLayout,
+    input: VisualizerInput,
+    strut: VolumeStrut,
+    percentage_lit: f64,
+    start_lit_range: f64,
+    end_lit_range: f64,
+    gradient_focus: f64,
+) {
+    let Some(length) = dome_strut_length(strut.index) else {
+        return;
+    };
+    for led_index in 0..length {
+        let color = volume_gradient_pos(
+            strut,
+            length,
+            percentage_lit,
+            start_lit_range,
+            end_lit_range,
+            led_index,
+        )
+        .map_or(Rgb::BLACK, |gradient_pos| {
+            volume_color_from_part(
+                part_layout,
+                input,
+                strut.index,
+                gradient_pos,
+                gradient_focus,
+            )
+        });
+        commands.push(DomeCommand::Pixel {
+            strut_index: strut.index,
+            led_index,
+            color,
+        });
+    }
+}
+
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "Volume strut lengths and LED indexes are small Spectrum topology constants"
+)]
+fn volume_gradient_pos(
+    strut: VolumeStrut,
+    length: usize,
+    percentage_lit: f64,
+    start_lit_range: f64,
+    end_lit_range: f64,
+    led_index: usize,
+) -> Option<f64> {
+    if percentage_lit == 0.0 {
+        return None;
+    }
+    let led = if strut.reversed {
+        length.saturating_sub(led_index)
+    } else {
+        led_index
+    };
+    let step = (end_lit_range - start_lit_range) / (length as f64 * percentage_lit);
+    let gradient_pos = start_lit_range + led as f64 * step;
+    (gradient_pos <= 1.0).then_some(gradient_pos)
+}
+
+fn volume_color_from_part(
+    part_layout: &VolumeStrutLayout,
+    input: VisualizerInput,
+    strut_index: usize,
+    pixel_pos: f64,
+    gradient_focus: f64,
+) -> Rgb {
+    let color_index = match part_layout.segment_index_of_strut(strut_index) {
+        Some(0) => 1,
+        Some(1) => 2,
+        Some(2) => 3,
+        _ => 0,
+    };
+    input.palette_entries[color_index].gradient_color(pixel_pos, gradient_focus, true)
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Spectrum truncates ProgressThroughBeat times four to choose the volume center"
+)]
+fn volume_center_offset(beat_progress: f64) -> usize {
+    (progress_through_beat(beat_progress, VOLUME_ROTATION_SPEED) * 4.0) as usize
+}
+
+fn progress_through_beat(beat_progress: f64, factor: f64) -> f64 {
+    if factor == 0.0 {
+        0.0
+    } else {
+        wrap(beat_progress * factor, 0.0, 1.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct VolumeStrut {
+    index: usize,
+    reversed: bool,
+}
+
+#[derive(Clone, Debug)]
+struct VolumeStrutLayoutSegment {
+    struts: Vec<VolumeStrut>,
+}
+
+#[derive(Clone, Debug)]
+struct VolumeStrutLayout {
+    segments: Vec<VolumeStrutLayoutSegment>,
+    strut_to_segment: [Option<usize>; DOME_STRUTS],
+}
+
+impl VolumeStrutLayout {
+    fn new(segments: Vec<VolumeStrutLayoutSegment>) -> Self {
+        let mut strut_to_segment = [None; DOME_STRUTS];
+        for (segment_index, segment) in segments.iter().enumerate() {
+            for strut in &segment.struts {
+                strut_to_segment[strut.index] = Some(segment_index);
+            }
+        }
+        Self {
+            segments,
+            strut_to_segment,
+        }
+    }
+
+    fn segment_index_of_strut(&self, strut_index: usize) -> Option<usize> {
+        self.strut_to_segment.get(strut_index).copied().flatten()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct VolumeLayouts {
+    part: VolumeStrutLayout,
+    section: VolumeStrutLayout,
+}
+
+fn volume_layouts(center_offset: usize) -> VolumeLayouts {
+    let mut points = VOLUME_STARTING_POINTS;
+    for point in points.iter_mut().take(5) {
+        *point += center_offset;
+    }
+    if points[4] >= 40 {
+        points[4] -= 20;
+    }
+
+    let edge_dictionary = volume_edge_dictionary();
+    let mut cur_points_by_group: Vec<Vec<usize>> =
+        points.iter().copied().map(|point| vec![point]).collect();
+    let mut spoke_segments = Vec::new();
+    let mut struts_by_group: [Vec<VolumeStrut>; 6] = std::array::from_fn(|_| Vec::new());
+    let mut circle_segments = Vec::new();
+    let mut used_struts = [false; DOME_STRUTS];
+    let mut layers_left = VOLUME_ANIMATION_SIZE;
+
+    while layers_left > 0 {
+        let mut layer1 = Vec::new();
+        let mut next_points_by_group = Vec::new();
+        for (group_index, group) in cur_points_by_group.iter().enumerate() {
+            let mut new_points = Vec::new();
+            for &point in group {
+                for edge in &edge_dictionary[point] {
+                    if used_struts[edge.strut.index] {
+                        continue;
+                    }
+                    used_struts[edge.strut.index] = true;
+                    push_unique_strut(&mut layer1, edge.strut);
+                    push_unique_strut(&mut struts_by_group[group_index], edge.strut);
+                    push_unique_usize(&mut new_points, edge.connected_point);
+                }
+            }
+            next_points_by_group.push(new_points);
+        }
+        spoke_segments.push(VolumeStrutLayoutSegment { struts: layer1 });
+        layers_left -= 1;
+        if layers_left == 0 {
+            break;
+        }
+
+        cur_points_by_group = next_points_by_group;
+        let mut layer2 = Vec::new();
+        for (group_index, group) in cur_points_by_group.iter().enumerate() {
+            let Some(mut current_point) = group.first().copied() else {
+                circle_segments.push(VolumeStrutLayoutSegment { struts: Vec::new() });
+                continue;
+            };
+            for &point in group {
+                let connected_count = edge_dictionary[point]
+                    .iter()
+                    .filter(|edge| group.contains(&edge.connected_point))
+                    .count();
+                if connected_count == 1 {
+                    current_point = point;
+                    break;
+                }
+            }
+
+            let mut points_left = group.clone();
+            let mut circle_struts = Vec::new();
+            loop {
+                let mut next_point_in_loop = None;
+                for edge in &edge_dictionary[current_point] {
+                    if !group.contains(&edge.connected_point) || used_struts[edge.strut.index] {
+                        continue;
+                    }
+                    used_struts[edge.strut.index] = true;
+                    push_unique_strut(&mut layer2, edge.strut);
+                    push_unique_strut(&mut circle_struts, edge.strut);
+                    push_unique_strut(&mut struts_by_group[group_index], edge.strut);
+                    if points_left.contains(&edge.connected_point) {
+                        next_point_in_loop = Some(edge.connected_point);
+                    }
+                    break;
+                }
+                points_left.retain(|point| *point != current_point);
+                if let Some(next_point) = next_point_in_loop {
+                    current_point = next_point;
+                } else {
+                    break;
+                }
+            }
+            circle_segments.push(VolumeStrutLayoutSegment {
+                struts: circle_struts,
+            });
+        }
+        spoke_segments.push(VolumeStrutLayoutSegment { struts: layer2 });
+        layers_left -= 1;
+    }
+
+    VolumeLayouts {
+        part: VolumeStrutLayout::new(spoke_segments),
+        section: VolumeStrutLayout::new(circle_segments),
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct VolumeEdge {
+    connected_point: usize,
+    strut: VolumeStrut,
+}
+
+fn volume_edge_dictionary() -> Vec<Vec<VolumeEdge>> {
+    let mut edges = vec![Vec::new(); 71];
+    for (strut_index, [point0, point1]) in VOLUME_LINES.iter().copied().enumerate() {
+        edges[point0].push(VolumeEdge {
+            connected_point: point1,
+            strut: VolumeStrut {
+                index: strut_index,
+                reversed: false,
+            },
+        });
+        edges[point1].push(VolumeEdge {
+            connected_point: point0,
+            strut: VolumeStrut {
+                index: strut_index,
+                reversed: true,
+            },
+        });
+    }
+    edges
+}
+
+fn push_unique_usize(values: &mut Vec<usize>, value: usize) {
+    if !values.contains(&value) {
+        values.push(value);
+    }
+}
+
+fn push_unique_strut(values: &mut Vec<VolumeStrut>, value: VolumeStrut) {
+    if !values.iter().any(|strut| strut.index == value.index) {
+        values.push(value);
+    }
+}
+
+const VOLUME_LINES: [[usize; 2]; DOME_STRUTS] = [
+    [0, 1],
+    [1, 2],
+    [3, 2],
+    [3, 4],
+    [4, 5],
+    [5, 6],
+    [7, 6],
+    [7, 8],
+    [8, 9],
+    [9, 10],
+    [11, 10],
+    [11, 12],
+    [12, 13],
+    [13, 14],
+    [15, 14],
+    [15, 16],
+    [16, 17],
+    [17, 18],
+    [19, 18],
+    [19, 0],
+    [20, 21],
+    [22, 21],
+    [23, 22],
+    [24, 23],
+    [24, 25],
+    [26, 25],
+    [27, 26],
+    [28, 27],
+    [28, 29],
+    [30, 29],
+    [31, 30],
+    [32, 31],
+    [32, 33],
+    [34, 33],
+    [35, 34],
+    [36, 35],
+    [36, 37],
+    [38, 37],
+    [39, 38],
+    [20, 39],
+    [41, 40],
+    [42, 41],
+    [43, 42],
+    [44, 43],
+    [45, 44],
+    [46, 45],
+    [47, 46],
+    [48, 47],
+    [49, 48],
+    [50, 49],
+    [51, 50],
+    [52, 51],
+    [53, 52],
+    [54, 53],
+    [40, 54],
+    [56, 55],
+    [57, 56],
+    [58, 57],
+    [59, 58],
+    [60, 59],
+    [61, 60],
+    [62, 61],
+    [63, 62],
+    [64, 63],
+    [55, 64],
+    [65, 66],
+    [66, 67],
+    [67, 68],
+    [68, 69],
+    [69, 65],
+    [20, 0],
+    [0, 21],
+    [21, 1],
+    [1, 22],
+    [2, 22],
+    [23, 2],
+    [23, 3],
+    [24, 3],
+    [24, 4],
+    [4, 25],
+    [25, 5],
+    [5, 26],
+    [6, 26],
+    [27, 6],
+    [27, 7],
+    [28, 7],
+    [28, 8],
+    [8, 29],
+    [29, 9],
+    [9, 30],
+    [10, 30],
+    [31, 10],
+    [31, 11],
+    [32, 11],
+    [32, 12],
+    [12, 33],
+    [33, 13],
+    [13, 34],
+    [14, 34],
+    [35, 14],
+    [35, 15],
+    [36, 15],
+    [36, 16],
+    [16, 37],
+    [37, 17],
+    [17, 38],
+    [18, 38],
+    [39, 18],
+    [39, 19],
+    [20, 19],
+    [20, 40],
+    [21, 40],
+    [21, 41],
+    [22, 41],
+    [41, 23],
+    [42, 23],
+    [24, 42],
+    [24, 43],
+    [25, 43],
+    [25, 44],
+    [26, 44],
+    [44, 27],
+    [45, 27],
+    [28, 45],
+    [28, 46],
+    [29, 46],
+    [29, 47],
+    [30, 47],
+    [47, 31],
+    [48, 31],
+    [32, 48],
+    [32, 49],
+    [33, 49],
+    [33, 50],
+    [34, 50],
+    [50, 35],
+    [51, 35],
+    [36, 51],
+    [36, 52],
+    [37, 52],
+    [37, 53],
+    [38, 53],
+    [53, 39],
+    [54, 39],
+    [20, 54],
+    [40, 55],
+    [40, 56],
+    [41, 56],
+    [56, 42],
+    [42, 57],
+    [43, 57],
+    [43, 58],
+    [44, 58],
+    [58, 45],
+    [45, 59],
+    [46, 59],
+    [46, 60],
+    [47, 60],
+    [60, 48],
+    [48, 61],
+    [49, 61],
+    [49, 62],
+    [50, 62],
+    [62, 51],
+    [51, 63],
+    [52, 63],
+    [52, 64],
+    [53, 64],
+    [64, 54],
+    [54, 55],
+    [55, 65],
+    [56, 65],
+    [57, 65],
+    [57, 66],
+    [58, 66],
+    [59, 66],
+    [59, 67],
+    [60, 67],
+    [61, 67],
+    [61, 68],
+    [62, 68],
+    [63, 68],
+    [63, 69],
+    [64, 69],
+    [55, 69],
+    [65, 70],
+    [66, 70],
+    [67, 70],
+    [68, 70],
+    [69, 70],
+];
 
 #[allow(
     clippy::cast_possible_truncation,
@@ -1184,10 +1754,13 @@ fn quaternion_paintbrush_frame(input: VisualizerInput) -> Vec<Rgb> {
             Quaternion::from_yaw_pitch_roll(orientation.yaw, orientation.pitch, orientation.roll)
         },
     );
+    let frame_in_cycle = u64::from(paintbrush_frame_in_cycle(input));
+    let trail_orientations = paintbrush_trail_orientations(input, frame_in_cycle);
+    let ripple_counter = paintbrush_ripple_counter(frame_in_cycle);
+    let stamp_frame = paintbrush_stamp_frame(frame_in_cycle);
     let threshold_factor = 0.25 + f64::from(input.volume.clamp(0.0, 1.0)) + 0.01;
     let threshold = 2.0 / threshold_factor;
     let saturation = (1.3 / f64::from(input.volume.max(0.01)) - 1.0).clamp(0.2, 1.0);
-    let contour_counter = paintbrush_contour_counter(input);
 
     DOME_LED_POINTS
         .get_or_init(build_dome_led_points)
@@ -1206,23 +1779,35 @@ fn quaternion_paintbrush_frame(input: VisualizerInput) -> Vec<Rgb> {
                 color = hsv_to_rgb(hue, saturation, 1.0);
             }
 
-            let potential_contours =
-                (1000.0 * (potential - 0.5)).max(0.001).ln() + contour_counter / 100.0;
-            let contour_value = potential_contours - potential_contours.trunc();
-            if contour_value < 0.2 {
-                let bracket = potential_contours.trunc();
-                let value = 0.8 - (1.0 - bracket / 10.0).clamp(0.0, 0.8);
-                color = light_paint(color, hsv_to_rgb(hue, 0.4, value.clamp(0.0, 1.0)));
+            for (trail_orientation, fade) in &trail_orientations {
+                let (tx, ty, tz) = trail_orientation.transform_vector(x, y, z);
+                let trail_distance = distance3(tx, ty, tz, -1.0, 0.0, 0.0).max(0.001);
+                let trail_neg_distance = distance3(tx, ty, tz, 1.0, 0.0, 0.0).max(0.001);
+                let trail_potential = 1.0 / (trail_distance * trail_neg_distance);
+                if trail_potential > threshold {
+                    let trail_hue = (1.0 + trail_orientation.w) / 2.0;
+                    color = light_paint(color, hsv_to_rgb(trail_hue, saturation, *fade));
+                }
             }
 
-            // Keep the operator palette present in this port: the metaball
-            // drives shape/brightness while the active palette colors tint dim
-            // regions so the mode still responds to palette selection.
-            if color == Rgb::BLACK && (point.index + phase_offset(input.beat_progress)) % 97 < 8 {
-                input.palette[(point.index / 377) % input.palette.len()].scale(0.18)
-            } else {
-                color
+            if ripple_counter > 0.0 {
+                let ripple_radius = ripple_counter / 300.0;
+                let distance_to_spot = distance3(rx, ry, rz, -1.0, 0.0, 0.0);
+                if (distance_to_spot - ripple_radius).abs() < 0.012 {
+                    let ripple_saturation = (1.0 - ripple_counter / 600.0).clamp(0.0, 1.0);
+                    let ripple_value = (1.0 - ripple_counter / 800.0).clamp(0.0, 1.0);
+                    color = light_paint(color, hsv_to_rgb(hue, ripple_saturation, ripple_value));
+                }
             }
+
+            if let Some(stamp_frame) = stamp_frame {
+                let distance_to_spot = distance3(rx, ry, rz, -1.0, 0.0, 0.0);
+                if paintbrush_stamp_ring(distance_to_spot, stamp_frame) {
+                    color = hsv_to_rgb(hue, 0.2, 1.0);
+                }
+            }
+
+            color
         })
         .collect()
 }
@@ -1301,8 +1886,11 @@ impl Quaternion {
 }
 
 fn idle_paintbrush_orientation(input: VisualizerInput) -> Quaternion {
-    let level = f64::from(input.volume.clamp(0.0, 1.0));
-    let frame_in_cycle = paintbrush_frame_in_cycle(input);
+    idle_paintbrush_orientation_at(input.volume, paintbrush_frame_in_cycle(input))
+}
+
+fn idle_paintbrush_orientation_at(volume: f32, frame_in_cycle: u32) -> Quaternion {
+    let level = f64::from(volume.clamp(0.0, 1.0));
     let mut random = DotNetRandom::new(0);
     let mut yaw = 0.0;
     let mut pitch = -0.25;
@@ -1329,6 +1917,62 @@ fn idle_paintbrush_orientation(input: VisualizerInput) -> Quaternion {
     Quaternion::from_yaw_pitch_roll(yaw, pitch, roll)
 }
 
+fn paintbrush_trail_orientations(
+    input: VisualizerInput,
+    frame_in_cycle: u64,
+) -> Vec<(Quaternion, f64)> {
+    if input.orientation_override.is_some() || frame_in_cycle == 0 {
+        return Vec::new();
+    }
+
+    [8_u64, 18, 32, 56, 88, 128]
+        .into_iter()
+        .filter(|offset| frame_in_cycle >= *offset)
+        .map(|offset| {
+            let frame = (frame_in_cycle - offset)
+                .try_into()
+                .expect("paintbrush trail frame fits in u32");
+            let offset_f64 = f64::from(u32::try_from(offset).expect("trail offset fits in u32"));
+            let fade = (1.0 - offset_f64 / 150.0).clamp(0.12, 0.75);
+            (idle_paintbrush_orientation_at(input.volume, frame), fade)
+        })
+        .collect()
+}
+
+fn paintbrush_ripple_counter(frame_in_cycle: u64) -> f64 {
+    const RIPPLE_COOLDOWN_FRAMES: u64 = 100;
+    if frame_in_cycle <= RIPPLE_COOLDOWN_FRAMES {
+        return 0.0;
+    }
+    let frame = frame_in_cycle - RIPPLE_COOLDOWN_FRAMES;
+    if frame >= 1_000 {
+        0.0
+    } else {
+        f64::from(u32::try_from(frame).expect("ripple frame fits in u32"))
+    }
+}
+
+fn paintbrush_stamp_frame(frame_in_cycle: u64) -> Option<u64> {
+    const STAMP_START_FRAMES: u64 = 1_001;
+    if frame_in_cycle < STAMP_START_FRAMES {
+        return None;
+    }
+    let frame = frame_in_cycle - STAMP_START_FRAMES;
+    (frame < 90).then_some(frame)
+}
+
+fn paintbrush_stamp_ring(distance_to_spot: f64, stamp_frame: u64) -> bool {
+    if stamp_frame < 45 {
+        distance_to_spot.rem_euclid(0.4) < 0.05
+    } else {
+        let cooldown = 10.0
+            - f64::from(u32::try_from(stamp_frame - 45).expect("stamp frame fits in u32")) / 4.5;
+        let ring_distance = 2.4 - (1.8 / (4.0 - cooldown / 2.0)).clamp(0.0, 2.4);
+        let half_width = 0.003 * cooldown * cooldown;
+        (ring_distance - half_width..=ring_distance + half_width).contains(&distance_to_spot)
+    }
+}
+
 fn spectrum_nudge(random: &mut DotNetRandom, scale: f64) -> f64 {
     (random.next_double() - 0.5) * 2.0 * scale
 }
@@ -1337,10 +1981,6 @@ fn paintbrush_frame_in_cycle(input: VisualizerInput) -> u32 {
     (input.animation_frame % 57_600)
         .try_into()
         .expect("paintbrush animation cycle fits in u32")
-}
-
-fn paintbrush_contour_counter(input: VisualizerInput) -> f64 {
-    (4.0 * f64::from(input.volume) * f64::from(paintbrush_frame_in_cycle(input) + 1)) % 100.0
 }
 
 fn spectrum_quaternion_test_point(normalized_x: f64, normalized_y: f64) -> (f64, f64, f64) {
@@ -1554,30 +2194,6 @@ fn light_paint(base: Rgb, paint: Rgb) -> Rgb {
     }
 }
 
-fn preview_frame(mut color_for_index: impl FnMut(usize) -> Rgb) -> Vec<Rgb> {
-    (0..DOME_PIXELS).map(&mut color_for_index).collect()
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    reason = "Simulator preview clamps normalized controls before converting to an index"
-)]
-fn lit_count(volume: f32) -> usize {
-    (volume.clamp(0.0, 1.0) * DOME_PIXELS as f32) as usize
-}
-
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    reason = "Simulator preview clamps normalized beat progress before converting to an index"
-)]
-fn phase_offset(beat_progress: f64) -> usize {
-    (beat_progress.clamp(0.0, 1.0) * DOME_PIXELS as f64) as usize
-}
-
 #[cfg(test)]
 fn frame_hash(commands: &[DomeCommand]) -> u64 {
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
@@ -1683,6 +2299,16 @@ mod tests {
         DomeDiagnosticVisualizer, LiveVisualizer, OrientationOverride, StageVisualizer,
         StageVisualizerInput, VisualizerInput, INVENTORY,
     };
+
+    fn frame_colors(commands: &[DomeCommand]) -> &[domers_core::Rgb] {
+        commands
+            .iter()
+            .find_map(|command| match command {
+                DomeCommand::Frame(colors) => Some(colors.as_slice()),
+                DomeCommand::Flush | DomeCommand::Pixel { .. } => None,
+            })
+            .expect("visualizer should write a whole preview frame")
+    }
 
     #[derive(Deserialize)]
     struct VisualizerManifest {
@@ -1977,21 +2603,22 @@ mod tests {
     #[test]
     fn default_volume_preview_is_dome_sized_and_visible() {
         let commands = render_dome_visualizer(LiveVisualizer::Volume, VisualizerInput::default());
-        let frame = commands
+        let pixel_count = commands
             .iter()
-            .find_map(|command| match command {
-                DomeCommand::Frame(colors) => Some(colors),
-                DomeCommand::Flush | DomeCommand::Pixel { .. } => None,
+            .filter(|command| matches!(command, DomeCommand::Pixel { .. }))
+            .count();
+        let lit_count = commands
+            .iter()
+            .filter(|command| match command {
+                DomeCommand::Pixel { color, .. } => *color != domers_core::Rgb::BLACK,
+                DomeCommand::Flush | DomeCommand::Frame(_) => false,
             })
-            .expect("volume visualizer should write a whole preview frame");
+            .count();
 
-        assert_eq!(frame.len(), DOME_PIXELS);
+        assert!(pixel_count >= DOME_PIXELS);
         assert!(
-            frame
-                .iter()
-                .filter(|color| **color != domers_core::Rgb::BLACK)
-                .count()
-                > 3_000
+            lit_count > 1_000,
+            "volume visualizer should light a substantial part of the dome"
         );
     }
 
@@ -2067,6 +2694,61 @@ mod tests {
     }
 
     #[test]
+    fn quaternion_paintbrush_accumulates_spectrum_style_paint_layers() {
+        let first = render_dome_visualizer(
+            LiveVisualizer::QuaternionPaintbrush,
+            VisualizerInput {
+                animation_frame: 0,
+                ..VisualizerInput::default()
+            },
+        );
+        let later = render_dome_visualizer(
+            LiveVisualizer::QuaternionPaintbrush,
+            VisualizerInput {
+                animation_frame: 360,
+                ..VisualizerInput::default()
+            },
+        );
+        let first_lit = frame_colors(&first)
+            .iter()
+            .filter(|color| **color != domers_core::Rgb::BLACK)
+            .count();
+        let later_lit = frame_colors(&later)
+            .iter()
+            .filter(|color| **color != domers_core::Rgb::BLACK)
+            .count();
+
+        assert!(
+            later_lit > first_lit,
+            "paintbrush should retain trailing paint and ripple layers after the captured first frame"
+        );
+    }
+
+    #[test]
+    fn quaternion_paintbrush_event_layers_do_not_loop_reset() {
+        let early = render_dome_visualizer(
+            LiveVisualizer::QuaternionPaintbrush,
+            VisualizerInput {
+                animation_frame: 360,
+                ..VisualizerInput::default()
+            },
+        );
+        let later = render_dome_visualizer(
+            LiveVisualizer::QuaternionPaintbrush,
+            VisualizerInput {
+                animation_frame: 1_460,
+                ..VisualizerInput::default()
+            },
+        );
+
+        assert_ne!(
+            super::frame_hash(&early),
+            super::frame_hash(&later),
+            "paintbrush ripple/stamp event layers must not loop back into an obvious reset"
+        );
+    }
+
+    #[test]
     fn quaternion_paintbrush_uses_orientation_override() {
         let input = VisualizerInput {
             volume: 0.6,
@@ -2100,7 +2782,7 @@ mod tests {
     fn live_visualizer_frame_hashes_are_stable() {
         let cases = [
             (LiveVisualizer::TvStatic, 7_938_821_499_849_451_788),
-            (LiveVisualizer::Volume, 15_270_928_452_629_649_531),
+            (LiveVisualizer::Volume, 3_360_946_268_713_528_047),
             (LiveVisualizer::Flash, 14_695_981_039_346_656_037),
             (LiveVisualizer::Radial, 8_095_729_372_390_775_204),
             (LiveVisualizer::Splat, 12_459_070_695_921_506_308),
@@ -2113,7 +2795,7 @@ mod tests {
             ),
             (
                 LiveVisualizer::QuaternionPaintbrush,
-                16_568_517_163_162_142_121,
+                5_139_703_606_261_245_084,
             ),
         ];
         let actual: Vec<_> = cases
@@ -2138,20 +2820,15 @@ mod tests {
         custom.palette_entries[5] = domers_core::PaletteEntry::solid(0x77_88_99);
         custom.palette_entries[6] = domers_core::PaletteEntry::solid(0xaa_bb_cc);
 
-        for visualizer in [
-            LiveVisualizer::Volume,
-            LiveVisualizer::Radial,
-            LiveVisualizer::QuaternionPaintbrush,
-        ] {
-            assert_ne!(
-                super::frame_hash(&render_dome_visualizer(
-                    visualizer,
-                    VisualizerInput::default()
-                )),
-                super::frame_hash(&render_dome_visualizer(visualizer, custom)),
-                "{visualizer:?} should use palette entries beyond Color 1-3"
-            );
-        }
+        let visualizer = LiveVisualizer::Radial;
+        assert_ne!(
+            super::frame_hash(&render_dome_visualizer(
+                visualizer,
+                VisualizerInput::default()
+            )),
+            super::frame_hash(&render_dome_visualizer(visualizer, custom)),
+            "{visualizer:?} should use palette entries beyond Color 1-3"
+        );
     }
 
     #[test]
