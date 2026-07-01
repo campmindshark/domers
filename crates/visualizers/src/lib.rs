@@ -292,9 +292,12 @@ pub fn render_dome_visualizer(
     if visualizer == LiveVisualizer::Flash {
         return Vec::new();
     }
+    if visualizer == LiveVisualizer::TvStatic {
+        return tv_static_commands();
+    }
     let mut sink = DomeOutputSink::new(false, true);
     sink.write_buffer(match visualizer {
-        LiveVisualizer::TvStatic => tv_static_frame(input),
+        LiveVisualizer::TvStatic => unreachable!("TV Static writes Spectrum-style pixel commands"),
         LiveVisualizer::Volume => volume_frame(input),
         LiveVisualizer::Flash => unreachable!("Flash visualizer is event-driven"),
         LiveVisualizer::Radial => radial_frame(input),
@@ -371,37 +374,112 @@ pub fn render_stage_visualizer_with_input(
     }
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "TV static clamps normalized brightness before converting to an RGB byte cap"
-)]
-fn tv_static_frame(input: VisualizerInput) -> Vec<Rgb> {
-    let seed = phase_offset(input.beat_progress) as u32;
-    let brightness = (input.volume.clamp(0.05, 1.0) * 255.0).round() as u8;
-    preview_frame(|index| {
-        let index = index as u32;
-        Rgb {
-            r: static_channel(index, 0, seed, brightness),
-            g: static_channel(index, 1, seed, brightness),
-            b: static_channel(index, 2, seed, brightness),
+fn tv_static_commands() -> Vec<DomeCommand> {
+    let mut random = DotNetRandom::new(0);
+    let mut commands = Vec::with_capacity(DOME_PIXELS + 1);
+    for strut_index in 0..DOME_STRUTS {
+        let Some(strut_length) = dome_strut_length(strut_index) else {
+            continue;
+        };
+        for led_index in 0..strut_length {
+            commands.push(DomeCommand::Pixel {
+                strut_index,
+                led_index,
+                color: random.next_color(255),
+            });
         }
-    })
+    }
+    commands.push(DomeCommand::Flush);
+    commands
 }
 
-#[allow(
-    clippy::cast_possible_truncation,
-    reason = "Pseudo-random generator intentionally takes the high byte after mixing"
-)]
-fn static_channel(index: u32, channel: u32, seed: u32, brightness: u8) -> u8 {
-    let mut value = index
-        .wrapping_mul(1_664_525)
-        .wrapping_add(channel.wrapping_mul(1_013_904_223))
-        .wrapping_add(seed.wrapping_mul(22_695_477))
-        .wrapping_add(1_013_904_223);
-    value ^= value >> 16;
-    value = value.wrapping_mul(2_246_822_519);
-    ((value >> 24) as u8) % brightness.saturating_add(1)
+#[derive(Clone, Debug)]
+struct DotNetRandom {
+    seed_array: [i32; 56],
+    inext: usize,
+    inextp: usize,
+}
+
+impl DotNetRandom {
+    const MBIG: i32 = 2_147_483_647;
+    const MSEED: i32 = 161_803_398;
+
+    fn new(seed: i32) -> Self {
+        let subtraction = if seed == i32::MIN {
+            i32::MAX
+        } else {
+            seed.abs()
+        };
+        let mut seed_array = [0; 56];
+        let mut mj = Self::MSEED - subtraction;
+        if mj < 0 {
+            mj += Self::MBIG;
+        }
+        seed_array[55] = mj;
+        let mut mk = 1;
+        for i in 1..55 {
+            let ii = (21 * i) % 55;
+            seed_array[ii] = mk;
+            mk = mj - mk;
+            if mk < 0 {
+                mk += Self::MBIG;
+            }
+            mj = seed_array[ii];
+        }
+        for _ in 0..4 {
+            for i in 1..56 {
+                seed_array[i] -= seed_array[1 + (i + 30) % 55];
+                if seed_array[i] < 0 {
+                    seed_array[i] += Self::MBIG;
+                }
+            }
+        }
+        Self {
+            seed_array,
+            inext: 0,
+            inextp: 21,
+        }
+    }
+
+    fn internal_sample(&mut self) -> i32 {
+        self.inext += 1;
+        if self.inext >= 56 {
+            self.inext = 1;
+        }
+        self.inextp += 1;
+        if self.inextp >= 56 {
+            self.inextp = 1;
+        }
+        let mut ret = self.seed_array[self.inext] - self.seed_array[self.inextp];
+        if ret == Self::MBIG {
+            ret -= 1;
+        }
+        if ret < 0 {
+            ret += Self::MBIG;
+        }
+        self.seed_array[self.inext] = ret;
+        ret
+    }
+
+    fn next_double(&mut self) -> f64 {
+        f64::from(self.internal_sample()) * (1.0 / f64::from(Self::MBIG))
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "Spectrum truncates Random.NextDouble multiplied by the byte brightness cap"
+    )]
+    fn next_color(&mut self, brightness_byte: i32) -> Rgb {
+        let blue = (self.next_double() * f64::from(brightness_byte)) as u8;
+        let green = (self.next_double() * f64::from(brightness_byte)) as u8;
+        let red = (self.next_double() * f64::from(brightness_byte)) as u8;
+        Rgb {
+            r: red,
+            g: green,
+            b: blue,
+        }
+    }
 }
 
 fn dome_set_all_commands(color: Rgb) -> Vec<DomeCommand> {
@@ -1820,31 +1898,20 @@ mod tests {
 
     #[test]
     fn tv_static_uses_deterministic_varied_noise() {
-        let input = VisualizerInput {
-            volume: 0.5,
-            beat_progress: 0.1,
-            ..VisualizerInput::default()
-        };
-        let first = render_dome_visualizer(LiveVisualizer::TvStatic, input);
-        let second = render_dome_visualizer(LiveVisualizer::TvStatic, input);
-        let changed = render_dome_visualizer(
-            LiveVisualizer::TvStatic,
-            VisualizerInput {
-                beat_progress: 0.2,
-                ..input
-            },
-        );
+        let first = render_dome_visualizer(LiveVisualizer::TvStatic, VisualizerInput::default());
+        let second = render_dome_visualizer(LiveVisualizer::TvStatic, VisualizerInput::default());
 
         assert_eq!(first, second);
-        assert_ne!(first, changed);
-        let frame = first
+        let pixels: Vec<_> = first
             .iter()
-            .find_map(|command| match command {
-                DomeCommand::Frame(colors) => Some(colors),
-                DomeCommand::Flush | DomeCommand::Pixel { .. } => None,
+            .filter_map(|command| match command {
+                DomeCommand::Pixel { color, .. } => Some(*color),
+                DomeCommand::Flush | DomeCommand::Frame(_) => None,
             })
-            .expect("tv static should write a frame");
-        assert!(frame.windows(2).take(100).any(|pair| pair[0] != pair[1]));
+            .collect();
+        assert_eq!(pixels.len(), DOME_PIXELS);
+        assert!(pixels.windows(2).take(100).any(|pair| pair[0] != pair[1]));
+        assert!(matches!(first.last(), Some(DomeCommand::Flush)));
     }
 
     #[test]
@@ -1906,7 +1973,7 @@ mod tests {
     #[test]
     fn live_visualizer_frame_hashes_are_stable() {
         let cases = [
-            (LiveVisualizer::TvStatic, 14_075_851_066_622_254_809),
+            (LiveVisualizer::TvStatic, 7_938_821_499_849_451_788),
             (LiveVisualizer::Volume, 15_270_928_452_629_649_531),
             (LiveVisualizer::Flash, 14_695_981_039_346_656_037),
             (LiveVisualizer::Radial, 8_095_729_372_390_775_204),

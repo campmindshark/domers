@@ -24,7 +24,7 @@ Selectable dome modes:
 - `LEDDomeQuaternionMultiTestVisualizer`: selectable orientation test mode. Status: wired renderer with captured Spectrum hash.
 - `LEDDomeQuaternionPaintbrushVisualizer`: orientation paintbrush mode, buffer output. Status: wired renderer with captured Spectrum hash.
 - `LEDDomeSplatVisualizer`: audio splat mode, buffer output. Status: wired renderer with captured Spectrum hash.
-- `LEDDomeTVStaticVisualizer`: deterministic static mode, selectable in `dome-rs` for simulator/operator visibility. Status: wired renderer with captured Spectrum hash.
+- `LEDDomeTVStaticVisualizer`: deterministic static mode, selectable in `dome-rs` for simulator/operator visibility. Status: Rust renderer matches the captured Spectrum hash.
 
 Other live modes:
 
