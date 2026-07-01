@@ -375,7 +375,7 @@ impl Default for SimulatorControls {
 }
 
 impl SimulatorControls {
-    fn visualizer_input(self, config: &EngineConfig) -> VisualizerInput {
+    fn visualizer_input(self, config: &EngineConfig, animation_frame: u64) -> VisualizerInput {
         let palette = std::array::from_fn(|index| {
             config
                 .color_palette
@@ -384,6 +384,7 @@ impl SimulatorControls {
         VisualizerInput {
             volume: self.volume,
             beat_progress: self.beat_progress,
+            animation_frame,
             flash_active: self.flash_active,
             primary: palette[0],
             secondary: palette[1],
@@ -2202,6 +2203,7 @@ impl SimulatorSandboxRequest {
         VisualizerInput {
             volume: self.volume.unwrap_or(0.7).clamp(0.0, 1.0),
             beat_progress: self.beat_progress.unwrap_or(0.25).clamp(0.0, 1.0),
+            animation_frame: 0,
             flash_active: self.flash_active.unwrap_or(true),
             primary: domers_core::Rgb::from_u24(self.primary.unwrap_or(0x00_ff_00)),
             secondary: domers_core::Rgb::from_u24(self.secondary.unwrap_or(0x00_80_ff)),
@@ -2434,7 +2436,7 @@ fn render_operator_frame(
     let inputs = input_specs(simulator);
     let outputs = output_specs(config);
     let schedule = schedule_operator_frame(&inputs, &outputs);
-    let visualizer_input = simulator.visualizer_input(&engine);
+    let visualizer_input = simulator.visualizer_input(&engine, frame_index);
     let diagnostic_input = DiagnosticInput {
         state: diagnostic_state(frame_index),
         step: diagnostic_step(frame_index),

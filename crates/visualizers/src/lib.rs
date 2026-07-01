@@ -192,6 +192,8 @@ pub struct VisualizerInput {
     pub volume: f32,
     /// Beat progress in `[0.0, 1.0)`.
     pub beat_progress: f64,
+    /// Runtime frame index for visualizers with Spectrum-style internal motion.
+    pub animation_frame: u64,
     /// Whether a MIDI flash note is active.
     pub flash_active: bool,
     /// Primary operator palette color.
@@ -212,6 +214,7 @@ impl Default for VisualizerInput {
         Self {
             volume: 0.5,
             beat_progress: 0.25,
+            animation_frame: 0,
             flash_active: true,
             primary,
             secondary,
@@ -887,27 +890,26 @@ fn quaternion_multi_test_frame(_input: VisualizerInput) -> Vec<Rgb> {
 }
 
 fn quaternion_paintbrush_frame(input: VisualizerInput) -> Vec<Rgb> {
-    // Spectrum's paintbrush is a quaternion-driven metaball over the dome
-    // projection. With no live orientation device, it idles by sweeping a
-    // virtual pointer; use beat phase as that deterministic idle orientation.
-    let yaw = input.beat_progress.rem_euclid(1.0) * std::f64::consts::TAU;
-    let pitch = -0.25 * std::f64::consts::TAU;
+    // Spectrum's paintbrush idles by integrating yaw/pitch/roll momentum. This
+    // stateless port derives a long-period equivalent from runtime frame time so
+    // the brush follows a wandering path instead of one fixed beat loop.
+    let orientation = idle_paintbrush_orientation(input);
     let threshold_factor = 0.25 + f64::from(input.volume.clamp(0.0, 1.0)) + 0.01;
     let threshold = 2.0 / threshold_factor;
     let saturation = (1.3 / f64::from(input.volume.max(0.01)) - 1.0).clamp(0.2, 1.0);
-    let contour_counter = (4.0 * f64::from(input.volume) * 100.0 * input.beat_progress) % 100.0;
+    let contour_counter = (4.0 * f64::from(input.volume) * paintbrush_time(input)) % 100.0;
 
     DOME_LED_POINTS
         .get_or_init(build_dome_led_points)
         .iter()
         .map(|point| {
             let (x, y, z) = hemisphere_point(point.x, point.y);
-            let (rx, ry, rz) = rotate_yaw_pitch(x, y, z, yaw, pitch);
+            let (rx, ry, rz) = orientation.transform_vector(x, y, z);
             let distance = distance3(rx, ry, rz, -1.0, 0.0, 0.0).max(0.001);
             let neg_distance = distance3(rx, ry, rz, 1.0, 0.0, 0.0).max(0.001);
             let potential = 1.0 / (distance * neg_distance);
             let strength = potential - threshold;
-            let hue = (1.0 + yaw.cos()) / 2.0;
+            let hue = (1.0 + orientation.w) / 2.0;
 
             let mut color = Rgb::BLACK;
             if strength > 0.0 {
@@ -933,6 +935,100 @@ fn quaternion_paintbrush_frame(input: VisualizerInput) -> Vec<Rgb> {
             }
         })
         .collect()
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Quaternion {
+    x: f64,
+    y: f64,
+    z: f64,
+    w: f64,
+}
+
+impl Quaternion {
+    fn from_yaw_pitch_roll(yaw: f64, pitch: f64, roll: f64) -> Self {
+        let (half_yaw_sin, half_yaw_cos) = (yaw * 0.5).sin_cos();
+        let (half_pitch_sin, half_pitch_cos) = (pitch * 0.5).sin_cos();
+        let (half_roll_sin, half_roll_cos) = (roll * 0.5).sin_cos();
+        Self {
+            x: half_yaw_cos.mul_add(
+                half_pitch_sin * half_roll_cos,
+                half_yaw_sin * half_pitch_cos * half_roll_sin,
+            ),
+            y: half_yaw_sin.mul_add(
+                half_pitch_cos * half_roll_cos,
+                -half_yaw_cos * half_pitch_sin * half_roll_sin,
+            ),
+            z: half_yaw_cos.mul_add(
+                half_pitch_cos * half_roll_sin,
+                -half_yaw_sin * half_pitch_sin * half_roll_cos,
+            ),
+            w: half_yaw_cos.mul_add(
+                half_pitch_cos * half_roll_cos,
+                half_yaw_sin * half_pitch_sin * half_roll_sin,
+            ),
+        }
+        .normalize()
+    }
+
+    fn normalize(self) -> Self {
+        let length =
+            (self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w).sqrt();
+        if length <= f64::EPSILON {
+            return Self {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                w: 1.0,
+            };
+        }
+        Self {
+            x: self.x / length,
+            y: self.y / length,
+            z: self.z / length,
+            w: self.w / length,
+        }
+    }
+
+    fn transform_vector(self, x: f64, y: f64, z: f64) -> (f64, f64, f64) {
+        let qx2 = self.x + self.x;
+        let qy2 = self.y + self.y;
+        let qz2 = self.z + self.z;
+        let wx2 = self.w * qx2;
+        let wy2 = self.w * qy2;
+        let wz2 = self.w * qz2;
+        let xx2 = self.x * qx2;
+        let xy2 = self.x * qy2;
+        let xz2 = self.x * qz2;
+        let yy2 = self.y * qy2;
+        let yz2 = self.y * qz2;
+        let zz2 = self.z * qz2;
+        (
+            (1.0 - yy2 - zz2).mul_add(x, (xy2 - wz2).mul_add(y, (xz2 + wy2) * z)),
+            (xy2 + wz2).mul_add(x, (1.0 - xx2 - zz2).mul_add(y, (yz2 - wx2) * z)),
+            (xz2 - wy2).mul_add(x, (yz2 + wx2).mul_add(y, (1.0 - xx2 - yy2) * z)),
+        )
+    }
+}
+
+fn idle_paintbrush_orientation(input: VisualizerInput) -> Quaternion {
+    let time = paintbrush_time(input);
+    let level = f64::from(input.volume.clamp(0.0, 1.0));
+    let speed = 0.65 + level;
+    let yaw = std::f64::consts::TAU
+        * (0.18 * speed * time + 0.08 * (0.73 * time).sin() + 0.03 * (1.91 * time).sin());
+    let pitch = std::f64::consts::TAU
+        * (-0.25 + 0.10 * (0.47 * time + 0.4).sin() + 0.035 * (1.37 * time).cos());
+    let roll = std::f64::consts::TAU
+        * (0.11 * (0.31 * time + 1.7).sin() + 0.05 * (1.13 * time).sin());
+    Quaternion::from_yaw_pitch_roll(yaw, pitch, roll)
+}
+
+fn paintbrush_time(input: VisualizerInput) -> f64 {
+    let frame_in_cycle: u32 = (input.animation_frame % 57_600)
+        .try_into()
+        .expect("paintbrush animation cycle fits in u32");
+    f64::from(frame_in_cycle) / 120.0 + input.beat_progress.rem_euclid(1.0)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1041,18 +1137,6 @@ fn hemisphere_point(normalized_x: f64, normalized_y: f64) -> (f64, f64, f64) {
         (1.0 - x * x - y * y).sqrt()
     };
     (x, y, z)
-}
-
-fn rotate_yaw_pitch(x: f64, y: f64, z: f64, yaw: f64, pitch: f64) -> (f64, f64, f64) {
-    let (sin_yaw, cos_yaw) = yaw.sin_cos();
-    let yawed_x = x * cos_yaw + z * sin_yaw;
-    let yawed_z = -x * sin_yaw + z * cos_yaw;
-    let (sin_pitch, cos_pitch) = pitch.sin_cos();
-    (
-        yawed_x,
-        y * cos_pitch - yawed_z * sin_pitch,
-        y * sin_pitch + yawed_z * cos_pitch,
-    )
 }
 
 fn distance3(ax: f64, ay: f64, az: f64, bx: f64, by: f64, bz: f64) -> f64 {
@@ -1453,6 +1537,7 @@ mod tests {
         VisualizerInput {
             volume: input.volume,
             beat_progress: input.beat_progress,
+            animation_frame: 0,
             flash_active: input.flash_active,
             primary: palette[0],
             secondary: palette[1],
@@ -1582,6 +1667,32 @@ mod tests {
     }
 
     #[test]
+    fn quaternion_paintbrush_idle_path_uses_animation_frame() {
+        let input = VisualizerInput {
+            volume: 0.6,
+            beat_progress: 0.25,
+            animation_frame: 0,
+            ..VisualizerInput::default()
+        };
+        let later = VisualizerInput {
+            animation_frame: 360,
+            ..input
+        };
+
+        assert_ne!(
+            super::frame_hash(&render_dome_visualizer(
+                LiveVisualizer::QuaternionPaintbrush,
+                input
+            )),
+            super::frame_hash(&render_dome_visualizer(
+                LiveVisualizer::QuaternionPaintbrush,
+                later
+            )),
+            "idle paintbrush should not retrace a constant path when beat phase is unchanged"
+        );
+    }
+
+    #[test]
     fn live_visualizer_frame_hashes_are_stable() {
         let cases = [
             (LiveVisualizer::TvStatic, 14_075_851_066_622_254_809),
@@ -1598,7 +1709,7 @@ mod tests {
             ),
             (
                 LiveVisualizer::QuaternionPaintbrush,
-                9_872_828_698_301_197_742,
+                7_177_837_735_347_917_156,
             ),
         ];
         let actual: Vec<_> = cases
