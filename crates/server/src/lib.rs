@@ -2660,7 +2660,7 @@ fn render_scheduled_visualizer(
                 },
                 color_palette: config.color_palette.clone(),
                 color_palette_index: config.color_palette_index,
-                stage_brightness: brightness_f32(config.stage.brightness),
+                stage_brightness: config.stage.brightness,
             },
             &stage_side_lengths(config),
         )),

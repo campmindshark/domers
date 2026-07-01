@@ -269,7 +269,7 @@ pub struct StageVisualizerInput {
     /// Active Spectrum palette bank.
     pub color_palette_index: u8,
     /// Stage brightness multiplier.
-    pub stage_brightness: f32,
+    pub stage_brightness: f64,
 }
 
 impl Default for StageVisualizerInput {
@@ -741,21 +741,32 @@ fn stage_gradient_color(
     triangle_counter: usize,
     max_triangle_counter: usize,
     tracer_index: usize,
-    stage_brightness: f32,
+    stage_brightness: f64,
     volume: f32,
 ) -> Rgb {
     let pixel_pos = triangle_counter as f64 / max_triangle_counter.max(1) as f64;
     let focus_pos = tracer_index as f64 / max_triangle_counter.max(1) as f64;
-    palette
-        .gradient_color(
-            relative_color_index,
-            palette_index,
-            pixel_pos,
-            focus_pos,
-            true,
-        )
-        .scale(stage_brightness)
-        .scale(volume)
+    let color = palette.gradient_color(
+        relative_color_index,
+        palette_index,
+        pixel_pos,
+        focus_pos,
+        true,
+    );
+    scale_rgb_f64(scale_rgb_f64(color, stage_brightness), f64::from(volume))
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Spectrum LEDColor.ScaleColor truncates scaled double channels to integers"
+)]
+fn scale_rgb_f64(color: Rgb, scale: f64) -> Rgb {
+    Rgb {
+        r: (f64::from(color.r) * scale).clamp(0.0, 255.0) as u8,
+        g: (f64::from(color.g) * scale).clamp(0.0, 255.0) as u8,
+        b: (f64::from(color.b) * scale).clamp(0.0, 255.0) as u8,
+    }
 }
 
 fn diagnostic_colors(brightness: f32) -> [Rgb; 6] {
