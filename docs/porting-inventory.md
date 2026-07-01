@@ -19,7 +19,7 @@ Selectable dome modes:
 - `LEDDomeVolumeVisualizer`: default dome mode, audio input, per-pixel output. Status: wired renderer with captured Spectrum hash.
 - `LEDDomeRadialVisualizer`: radial audio mode, buffer output. Status: wired renderer with captured Spectrum hash.
 - `LEDDomeRaceVisualizer`: audio race mode; constructor accepts MIDI but the implementation does not use it. Status: wired renderer with captured Spectrum hash.
-- `LEDDomeSnakesVisualizer`: audio snakes mode and triangle graph helpers. Status: wired renderer with captured Spectrum hash.
+- `LEDDomeSnakesVisualizer`: audio snakes mode and triangle graph helpers. Status: Rust renderer matches the captured Spectrum hash.
 - `LEDDomeQuaternionTestVisualizer`: selectable orientation test mode. Status: wired renderer with captured Spectrum hash.
 - `LEDDomeQuaternionMultiTestVisualizer`: selectable orientation test mode. Status: wired renderer with captured Spectrum hash.
 - `LEDDomeQuaternionPaintbrushVisualizer`: orientation paintbrush mode, buffer output. Status: wired renderer with captured Spectrum hash.

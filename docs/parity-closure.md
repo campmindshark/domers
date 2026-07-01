@@ -17,7 +17,7 @@ and hardware output. Physical hardware acceptance is tracked separately.
 | --- | --- | --- |
 | Visualizer inventory | 17 used Spectrum visualizer names are tracked and dispatched. | Keep `INVENTORY` and `fixtures/spectrum-csharp/visualizer_frame_cases.json` in lockstep. |
 | Visualizer frame parity | All 17 tracked cases have headless Spectrum C# frame hashes in `visualizer_frame_cases.json`; the manifest requires a concrete expected value for every case. | Rust-rendered hashes match the captured Spectrum hashes, or a mismatch is recorded as an intentional deviation. |
-| Dome visualizer algorithms | Renderers are wired for all used dome modes and consume full active palette banks. Splat, Quaternion Test, TV Static, and Stage Depth now match their Spectrum frame goldens. | Volume, Radial, Race, Snakes, Quaternion Paintbrush, and Flash match Spectrum frame goldens or documented deviations. |
+| Dome visualizer algorithms | Renderers are wired for all used dome modes and consume full active palette banks. Splat, Snakes, Quaternion Test, TV Static, and Stage Depth now match their Spectrum frame goldens. | Volume, Radial, Race, Quaternion Paintbrush, and Flash match Spectrum frame goldens or documented deviations. |
 | Diagnostics | Dome/bar/stage diagnostics are wired. | C# frame goldens plus physical dome/bar/stage diagnostic sign-off. |
 | Audio input | UDP volume bridge, native CPAL capture behind the `native-capture` build feature, Spectrum audio device identity, all-endpoint index mapping, XML import, audio level-driver preset/channel import, and Madmom audio-index derivation are covered. | Physical show-device sign-off validates real capture devices and levels. |
 | MIDI input | UDP command transport and native midir capture behind the `native-capture` build feature feed device-scoped state, configurable wildcard/exact bindings, runtime actions, knob/note defaults, Spectrum knob math, ADSR level-driver bindings, and a MIDI log. | Physical controller discovery/sign-off remains hardware acceptance. |
@@ -30,10 +30,12 @@ and hardware output. Physical hardware acceptance is tracked separately.
 
 ## Open TODOs
 
-- Visualizer exactness: 5 captured Spectrum C# goldens still differ from the
+- Visualizer exactness: 4 captured Spectrum C# goldens still differ from the
   Rust renderer: `LEDDomeVolumeVisualizer`, `LEDDomeRadialVisualizer`,
-  `LEDDomeRaceVisualizer`, `LEDDomeSnakesVisualizer`,
-  and `LEDDomeQuaternionPaintbrushVisualizer`.
+  `LEDDomeRaceVisualizer`, and `LEDDomeQuaternionPaintbrushVisualizer`.
+- Snakes exactness is closed: Rust now emits the captured first update after
+  Spectrum's throttle, matching the seeded two-snake black triangle command
+  sequence.
 - TV Static exactness is closed: Rust now emits Spectrum-style seeded
   `Random(0)` pixel commands in strut/LED order and matches the captured
   `LEDDomeTVStaticVisualizer` golden.

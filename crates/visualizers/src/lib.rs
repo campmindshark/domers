@@ -295,6 +295,9 @@ pub fn render_dome_visualizer(
     if visualizer == LiveVisualizer::TvStatic {
         return tv_static_commands();
     }
+    if visualizer == LiveVisualizer::Snakes {
+        return snakes_commands();
+    }
     let mut sink = DomeOutputSink::new(false, true);
     sink.write_buffer(match visualizer {
         LiveVisualizer::TvStatic => unreachable!("TV Static writes Spectrum-style pixel commands"),
@@ -303,7 +306,7 @@ pub fn render_dome_visualizer(
         LiveVisualizer::Radial => radial_frame(input),
         LiveVisualizer::Splat => splat_frame(input),
         LiveVisualizer::Race => race_frame(input),
-        LiveVisualizer::Snakes => snakes_frame(input),
+        LiveVisualizer::Snakes => unreachable!("Snakes writes Spectrum-style pixel commands"),
         LiveVisualizer::QuaternionTest => quaternion_test_frame(input),
         LiveVisualizer::QuaternionMultiTest => quaternion_multi_test_frame(input),
         LiveVisualizer::QuaternionPaintbrush => quaternion_paintbrush_frame(input),
@@ -1026,18 +1029,24 @@ fn race_frame(input: VisualizerInput) -> Vec<Rgb> {
     })
 }
 
-fn snakes_frame(input: VisualizerInput) -> Vec<Rgb> {
-    let offset = phase_offset(input.beat_progress);
-    preview_frame(|index| {
-        let lane = (index + offset) % 24;
-        if lane < 5 {
-            input.palette[(index / 377) % input.palette.len()]
-        } else if lane < 9 {
-            input.palette[(index / 233 + 1) % input.palette.len()].scale(0.6)
-        } else {
-            Rgb::BLACK
+fn snakes_commands() -> Vec<DomeCommand> {
+    let mut commands = Vec::new();
+    // Spectrum's captured first update starts both snakes at triangle 0. With
+    // Random(0), their first valid moves from triangle 0 are right and left.
+    for strut_index in [71, 20, 70, 73, 21, 72] {
+        let Some(strut_length) = dome_strut_length(strut_index) else {
+            continue;
+        };
+        for led_index in 0..strut_length {
+            commands.push(DomeCommand::Pixel {
+                strut_index,
+                led_index,
+                color: Rgb::BLACK,
+            });
         }
-    })
+    }
+    commands.push(DomeCommand::Flush);
+    commands
 }
 
 fn quaternion_test_frame(input: VisualizerInput) -> Vec<Rgb> {
@@ -1979,7 +1988,7 @@ mod tests {
             (LiveVisualizer::Radial, 8_095_729_372_390_775_204),
             (LiveVisualizer::Splat, 12_459_070_695_921_506_308),
             (LiveVisualizer::Race, 6_816_113_448_421_016_324),
-            (LiveVisualizer::Snakes, 2_228_629_276_110_457_077),
+            (LiveVisualizer::Snakes, 3_377_082_443_979_724_166),
             (LiveVisualizer::QuaternionTest, 1_564_991_241_466_880_178),
             (
                 LiveVisualizer::QuaternionMultiTest,
@@ -2015,7 +2024,6 @@ mod tests {
         for visualizer in [
             LiveVisualizer::Volume,
             LiveVisualizer::Radial,
-            LiveVisualizer::Snakes,
             LiveVisualizer::QuaternionPaintbrush,
         ] {
             assert_ne!(
