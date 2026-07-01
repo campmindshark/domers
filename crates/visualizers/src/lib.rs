@@ -341,6 +341,9 @@ pub fn render_dome_visualizer(
 pub struct VisualizerRuntime {
     active: Option<LiveVisualizer>,
     snakes: Option<SnakesRuntime>,
+    race: Option<RaceRuntime>,
+    radial: Option<RadialRuntime>,
+    splat: Option<SplatRuntime>,
 }
 
 impl VisualizerRuntime {
@@ -371,6 +374,18 @@ impl VisualizerRuntime {
                 let runtime = self.snakes.get_or_insert_with(SnakesRuntime::new);
                 runtime.render(&input, &mut commands);
             }
+            LiveVisualizer::Race => {
+                let runtime = self.race.get_or_insert_with(RaceRuntime::new);
+                runtime.render(&input, &mut commands);
+            }
+            LiveVisualizer::Radial => {
+                let runtime = self.radial.get_or_insert_with(RadialRuntime::new);
+                runtime.render(&input, &mut commands);
+            }
+            LiveVisualizer::Splat => {
+                let runtime = self.splat.get_or_insert_with(SplatRuntime::new);
+                runtime.render(&input, &mut commands);
+            }
             other => commands.extend(render_dome_visualizer(other, input)),
         }
 
@@ -380,6 +395,9 @@ impl VisualizerRuntime {
     /// Drop all persistent per-visualizer state (invoked on visualizer switch).
     fn reset(&mut self) {
         self.snakes = None;
+        self.race = None;
+        self.radial = None;
+        self.splat = None;
     }
 }
 
@@ -413,6 +431,575 @@ impl SnakesRuntime {
             self.state.step(&input.palette, out);
         }
         self.last_step_ms = Some(now);
+    }
+}
+
+/// Spectrum `domeVolumeRotationSpeed` default used by Race rotation math.
+const RACE_ROTATION_SPEED: f64 = 1.0;
+/// Spectrum `domeRadialSize` default; Race uses it as racer band half-width.
+const RACE_RACER_SPACING: f64 = 0.1;
+
+#[derive(Clone, Copy, Debug)]
+enum RaceRotation {
+    Constant,
+    VolumeSquared,
+    Beat,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum RaceColoring {
+    Multi,
+    FadeExp,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RaceRacerConfig {
+    rotation: RaceRotation,
+    width: f64,
+    coloring: RaceColoring,
+    color_index: usize,
+}
+
+/// Spectrum `LEDDomeRaceVisualizer.racerConfig`, ground-to-pole order.
+const RACE_RACER_CONFIGS: [RaceRacerConfig; 4] = [
+    RaceRacerConfig {
+        rotation: RaceRotation::VolumeSquared,
+        width: 1.0,
+        coloring: RaceColoring::Multi,
+        color_index: 0,
+    },
+    RaceRacerConfig {
+        rotation: RaceRotation::VolumeSquared,
+        width: 0.25,
+        coloring: RaceColoring::FadeExp,
+        color_index: 1,
+    },
+    RaceRacerConfig {
+        rotation: RaceRotation::Beat,
+        width: 0.125,
+        coloring: RaceColoring::FadeExp,
+        color_index: 2,
+    },
+    RaceRacerConfig {
+        rotation: RaceRotation::Constant,
+        width: 1.0,
+        coloring: RaceColoring::Multi,
+        color_index: 3,
+    },
+];
+
+#[derive(Clone, Debug)]
+struct RaceRacer {
+    angle: f64,
+    radians: f64,
+    accumulated_seconds: f64,
+    config: RaceRacerConfig,
+}
+
+impl RaceRacer {
+    fn new(config: RaceRacerConfig) -> Self {
+        Self {
+            angle: 0.0,
+            radians: std::f64::consts::TAU * config.width,
+            accumulated_seconds: 0.0,
+            config,
+        }
+    }
+
+    fn revs_per_second(&self, volume: f64, measure_length_ms: Option<u32>) -> f64 {
+        match self.config.rotation {
+            RaceRotation::VolumeSquared => volume.mul_add(volume, RACE_ROTATION_SPEED / 12.0),
+            RaceRotation::Beat => {
+                let beats_per_second = match measure_length_ms {
+                    Some(measure) if measure > 0 => 1000.0 / f64::from(measure),
+                    _ => 1.0,
+                };
+                beats_per_second / 4.0
+            }
+            RaceRotation::Constant => RACE_ROTATION_SPEED / 4.0,
+        }
+    }
+
+    fn move_racer(&mut self, num_seconds: f64, volume: f64, measure_length_ms: Option<u32>) {
+        let rads_per_second =
+            std::f64::consts::TAU * self.revs_per_second(volume, measure_length_ms);
+        let rads = (num_seconds + self.accumulated_seconds) * rads_per_second;
+        if rads < 0.0001 {
+            // Too small to move at f64 precision; bank the time for a later step.
+            self.accumulated_seconds += num_seconds;
+            return;
+        }
+        self.angle += rads;
+        if self.angle > std::f64::consts::PI {
+            self.angle -= std::f64::consts::TAU;
+        }
+        self.accumulated_seconds = 0.0;
+    }
+}
+
+/// Persistent Race runtime porting `LEDDomeRaceVisualizer`'s wall-clock racers.
+#[derive(Clone, Debug)]
+struct RaceRuntime {
+    racers: Vec<RaceRacer>,
+    last_ms: Option<u64>,
+}
+
+impl RaceRuntime {
+    fn new() -> Self {
+        Self {
+            racers: RACE_RACER_CONFIGS.iter().copied().map(RaceRacer::new).collect(),
+            last_ms: None,
+        }
+    }
+
+    #[allow(
+        clippy::cast_precision_loss,
+        reason = "Millisecond deltas are small and converted to fractional seconds"
+    )]
+    fn render(&mut self, input: &VisualizerInput, out: &mut Vec<DomeCommand>) {
+        if let Some(last) = self.last_ms {
+            let num_seconds = input.now_ms.saturating_sub(last) as f64 / 1000.0;
+            let volume = f64::from(input.volume.clamp(0.0, 1.0));
+            for racer in &mut self.racers {
+                racer.move_racer(num_seconds, volume, input.measure_length_ms);
+            }
+        }
+        self.last_ms = Some(input.now_ms);
+
+        let points = DOME_LED_POINTS.get_or_init(build_dome_led_points);
+        let mut point_index = 0;
+        for strut_index in 0..DOME_STRUTS {
+            let Some(strut_length) = dome_strut_length(strut_index) else {
+                continue;
+            };
+            for led_index in 0..strut_length {
+                let point = points.get(point_index).copied().unwrap_or(DomeLedPoint {
+                    index: point_index,
+                    x: 0.5,
+                    y: 0.5,
+                });
+                point_index += 1;
+                out.push(DomeCommand::Pixel {
+                    strut_index,
+                    led_index,
+                    color: self.pixel_color(*input, point.x, point.y),
+                });
+            }
+        }
+        out.push(DomeCommand::Flush);
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss,
+        reason = "Spectrum truncates the floating racer height to an integer band index"
+    )]
+    fn pixel_color(&self, input: VisualizerInput, projected_x: f64, projected_y: f64) -> Rgb {
+        let px = projected_x * 2.0 - 1.0;
+        let py = projected_y * 2.0 - 1.0;
+        let mut height = 1.0 - (px * px + py * py).sqrt();
+        let mut angle = py.atan2(px);
+
+        if height > 0.9999 {
+            height = 0.9999;
+        }
+        let racer_loc_y = height * 4.0;
+        if racer_loc_y < 0.0 {
+            return Rgb::BLACK;
+        }
+        let racer_index = racer_loc_y as usize;
+        let local_y = (racer_loc_y - racer_index as f64 - 0.5).abs();
+        if local_y > RACE_RACER_SPACING {
+            return Rgb::BLACK;
+        }
+        let Some(racer) = self.racers.get(racer_index) else {
+            return Rgb::BLACK;
+        };
+
+        let mut start_angle = racer.angle;
+        if start_angle < 0.0 {
+            start_angle += std::f64::consts::TAU;
+        }
+        if angle < 0.0 {
+            angle += std::f64::consts::TAU;
+        }
+        let mut offset = angle - start_angle;
+        if offset < 0.0 {
+            offset += std::f64::consts::TAU;
+        }
+        if offset < std::f64::consts::TAU - racer.radians {
+            return Rgb::BLACK;
+        }
+        let loc_ang = 1.0 - (std::f64::consts::TAU - offset) / racer.radians;
+
+        match racer.config.coloring {
+            RaceColoring::Multi => race_multi_color(input, loc_ang),
+            RaceColoring::FadeExp => scale_rgb_f64(
+                input.palette[racer.config.color_index],
+                1.0 / (1.0 + (4.0 - 4.0 * loc_ang).exp()),
+            ),
+        }
+    }
+}
+
+/// Spectrum `LEDDomeOutputBuffer` pixel retaining fractional channels so fade
+/// accumulation across frames matches the C# reference exactly.
+#[derive(Clone, Debug)]
+struct DomeBufferPixel {
+    x: f64,
+    y: f64,
+    color: u32,
+    r: f64,
+    g: f64,
+    b: f64,
+}
+
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Spectrum ClampByte truncates the fractional channel to a byte on pack"
+)]
+fn clamp_byte(value: f64) -> u32 {
+    if value <= 0.0 {
+        0
+    } else if value >= 255.0 {
+        255
+    } else {
+        value as u32
+    }
+}
+
+impl DomeBufferPixel {
+    fn set_color(&mut self, color: Rgb) {
+        let packed = color.to_u24();
+        self.color = packed;
+        self.r = f64::from((packed >> 16) & 0xff);
+        self.g = f64::from((packed >> 8) & 0xff);
+        self.b = f64::from(packed & 0xff);
+    }
+
+    fn update_color(&mut self) {
+        self.color = (clamp_byte(self.r) << 16) | (clamp_byte(self.g) << 8) | clamp_byte(self.b);
+    }
+
+    fn fade(&mut self, mul: f64, sub: f64) {
+        if self.color == 0 {
+            return;
+        }
+        self.r = self.r.mul_add(mul, -sub);
+        self.g = self.g.mul_add(mul, -sub);
+        self.b = self.b.mul_add(mul, -sub);
+        self.update_color();
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::cast_possible_wrap,
+        clippy::many_single_char_names,
+        reason = "Ported bit-for-bit from Spectrum LEDDomeOutputPixel.HueRotate"
+    )]
+    fn hue_rotate(&mut self, rate: f64) {
+        if self.color == 0 {
+            return;
+        }
+        let r = self.r / 255.0;
+        let g = self.g / 255.0;
+        let b = self.b / 255.0;
+        let max = r.max(g).max(b);
+        let min = r.min(g).min(b);
+        let d = max - min;
+        let s = if max == 0.0 { 0.0 } else { d / max };
+        if s == 0.0 {
+            return;
+        }
+        let v = max;
+        let mut h = 0.0;
+        if (max - min).abs() > f64::EPSILON {
+            if r > g {
+                if r > b {
+                    h = (g - b) / d + if g < b { 6.0 } else { 0.0 };
+                } else {
+                    h = (r - g) / d + 4.0;
+                }
+            } else if g > b {
+                h = (b - r) / d + 2.0;
+            } else {
+                h = (r - g) / d + 4.0;
+            }
+            h /= 6.0;
+        }
+        let mut shifted_hue = (h + rate) % 1.0;
+        if shifted_hue > 1.0 {
+            shifted_hue -= 1.0;
+        }
+        if shifted_hue < 0.0 {
+            shifted_hue += 1.0;
+        }
+        let j = (shifted_hue * 6.0).floor() as i64;
+        let f = shifted_hue * 6.0 - j as f64;
+        let p = v * (1.0 - s);
+        let q = v * (1.0 - f * s);
+        let t = v * (1.0 - (1.0 - f) * s);
+        let (nr, ng, nb) = match j.rem_euclid(6) {
+            0 => (v, t, p),
+            1 => (q, v, p),
+            2 => (p, v, t),
+            3 => (p, q, v),
+            4 => (t, p, v),
+            _ => (v, p, q),
+        };
+        self.r = nr * 255.0;
+        self.g = ng * 255.0;
+        self.b = nb * 255.0;
+        self.update_color();
+    }
+
+    fn rgb(&self) -> Rgb {
+        Rgb::from_u24(self.color)
+    }
+}
+
+/// Persistent full-dome buffer mirroring `LEDDomeOutputBuffer`.
+#[derive(Clone, Debug)]
+struct DomeBuffer {
+    pixels: Vec<DomeBufferPixel>,
+}
+
+impl DomeBuffer {
+    fn new() -> Self {
+        let points = DOME_LED_POINTS.get_or_init(build_dome_led_points);
+        Self {
+            pixels: points
+                .iter()
+                .map(|point| DomeBufferPixel {
+                    x: point.x,
+                    y: point.y,
+                    color: 0,
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                })
+                .collect(),
+        }
+    }
+
+    fn fade(&mut self, mul: f64, sub: f64) {
+        for pixel in &mut self.pixels {
+            pixel.fade(mul, sub);
+        }
+    }
+
+    fn hue_rotate(&mut self, rate: f64) {
+        for pixel in &mut self.pixels {
+            pixel.hue_rotate(rate);
+        }
+    }
+
+    fn frame_commands(&self) -> Vec<DomeCommand> {
+        vec![
+            DomeCommand::Frame(self.pixels.iter().map(DomeBufferPixel::rgb).collect()),
+            DomeCommand::Flush,
+        ]
+    }
+}
+
+// Spectrum dome config defaults (`SpectrumConfiguration`) hardcoded here because
+// domers pins Spectrum's default preset; wiring them from DomersConfig is the
+// diagnostics-cadence follow-up.
+const DOME_GLOBAL_FADE_SPEED: f64 = 0.0;
+const DOME_GLOBAL_HUE_SPEED: f64 = 1.0;
+const DOME_RADIAL_ROTATION_SPEED: f64 = 1.0;
+const DOME_RADIAL_GRADIENT_SPEED: f64 = 1.0;
+const DOME_RADIAL_CENTER_SPEED: f64 = 0.0;
+const DOME_RADIAL_CENTER_ANGLE: f64 = 0.0;
+const DOME_RADIAL_CENTER_DISTANCE: f64 = 0.0;
+const DOME_RADIAL_EFFECT: i32 = 0;
+const DOME_RADIAL_FREQUENCY: f64 = 1.0;
+const DOME_RADIAL_SIZE: f64 = 0.1;
+const SPLAT_FADE: f64 = 0.96;
+
+fn polar_to_cartesian(angle: f64, distance: f64) -> (f64, f64) {
+    (angle.cos() * distance, angle.sin() * distance)
+}
+
+/// Compute `(val, gradient_val)` for a radial effect, porting the C# switch.
+fn radial_effect(effect: i32, angle: f64, dist: f64, current_angle: f64) -> (f64, f64) {
+    let freq = DOME_RADIAL_FREQUENCY;
+    match effect {
+        1 => {
+            let mut val = map_wrap(dist, current_angle, 1.0 + current_angle, 0.0, 1.0);
+            val = wrap(val * freq, 0.0, 1.0);
+            val = map_value(val, 0.0, 1.0, -1.0, 1.0).abs();
+            let gradient_val = map_value(angle, 0.0, 1.0, -1.0, 1.0).abs();
+            (val, gradient_val)
+        }
+        2 => {
+            let mut val = map_wrap(
+                angle + dist / freq,
+                current_angle,
+                1.0 + current_angle,
+                0.0,
+                1.0,
+            );
+            val = wrap(val * freq, 0.0, 1.0);
+            val = map_value(val, 0.0, 1.0, -1.0, 1.0).abs();
+            (val, dist)
+        }
+        3 => {
+            let mut a = map_wrap(angle, current_angle, 1.0 + current_angle, 0.0, 1.0);
+            a = wrap(a * freq, 0.0, 1.0);
+            a = map_value(a, 0.0, 1.0, -1.0, 1.0).abs();
+            ((dist - a).clamp(0.0, 1.0), dist)
+        }
+        _ => {
+            let mut val = map_wrap(angle, current_angle, 1.0 + current_angle, 0.0, 1.0);
+            val = wrap(val * freq, 0.0, 1.0);
+            val = map_value(val, 0.0, 1.0, -1.0, 1.0).abs();
+            (val, dist)
+        }
+    }
+}
+
+/// Persistent Radial runtime porting `LEDDomeRadialVisualizer`.
+#[derive(Clone, Debug)]
+struct RadialRuntime {
+    buffer: DomeBuffer,
+    current_angle: f64,
+    current_gradient: f64,
+    current_center_angle: f64,
+    last_progress: f64,
+}
+
+impl RadialRuntime {
+    fn new() -> Self {
+        Self {
+            buffer: DomeBuffer::new(),
+            current_angle: 0.0,
+            current_gradient: 0.0,
+            current_center_angle: 0.0,
+            last_progress: 0.0,
+        }
+    }
+
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "Spectrum picks the radial gradient by truncating normalized volume times 8"
+    )]
+    fn render(&mut self, input: &VisualizerInput, out: &mut Vec<DomeCommand>) {
+        self.buffer
+            .fade(1.0 - 10f64.powf(-DOME_GLOBAL_FADE_SPEED), 0.0);
+        self.buffer.hue_rotate(10f64.powf(-DOME_GLOBAL_HUE_SPEED));
+
+        let level = f64::from(input.volume.clamp(0.0, 1.0));
+        let adjusted_level = level.sqrt().clamp(0.1, 1.0);
+        let progress = input.beat_progress;
+        let delta = wrap(progress - self.last_progress, 0.0, 1.0);
+        self.current_angle = wrap(
+            self.current_angle + DOME_RADIAL_ROTATION_SPEED * delta * 0.25,
+            0.0,
+            1.0,
+        );
+        self.current_gradient = wrap(
+            self.current_gradient + DOME_RADIAL_GRADIENT_SPEED * delta,
+            0.0,
+            1.0,
+        );
+        self.current_center_angle = wrap(
+            self.current_center_angle + DOME_RADIAL_CENTER_SPEED * delta * 0.25,
+            0.0,
+            1.0,
+        );
+        self.last_progress = progress;
+
+        let center = polar_to_cartesian(
+            DOME_RADIAL_CENTER_ANGLE + self.current_center_angle * std::f64::consts::TAU,
+            DOME_RADIAL_CENTER_DISTANCE,
+        );
+        let which_gradient = ((level * 8.0) as usize).min(7);
+        let size_limit = DOME_RADIAL_SIZE * adjusted_level;
+
+        for pixel in &mut self.buffer.pixels {
+            let px = (pixel.x + center.0) * 2.0 - 1.0;
+            let py = (pixel.y + center.1) * 2.0 - 1.0;
+            let angle = map_wrap(
+                py.atan2(px),
+                -std::f64::consts::PI,
+                std::f64::consts::PI,
+                0.0,
+                1.0,
+            );
+            let dist = (px * px + py * py).sqrt();
+            let (val, gradient_val) = radial_effect(DOME_RADIAL_EFFECT, angle, dist, self.current_angle);
+            if val <= size_limit {
+                let color = input.palette_entries[which_gradient].gradient_color(
+                    gradient_val,
+                    self.current_gradient,
+                    true,
+                );
+                pixel.set_color(color);
+            }
+        }
+
+        out.extend(self.buffer.frame_commands());
+    }
+}
+
+/// Persistent Splat runtime porting `LEDDomeSplatVisualizer`.
+#[derive(Clone, Debug)]
+struct SplatRuntime {
+    buffer: DomeBuffer,
+    rng: DotNetRandom,
+    last_progress: f64,
+    seen_first: bool,
+}
+
+impl SplatRuntime {
+    fn new() -> Self {
+        Self {
+            buffer: DomeBuffer::new(),
+            rng: DotNetRandom::new(0),
+            last_progress: 0.0,
+            seen_first: false,
+        }
+    }
+
+    #[allow(
+        clippy::cast_sign_loss,
+        reason = "Spectrum indexes the palette with a non-negative Random.Next() modulo 8"
+    )]
+    fn render(&mut self, input: &VisualizerInput, out: &mut Vec<DomeCommand>) {
+        let level = f64::from(input.volume.clamp(0.0, 1.0));
+        let adjusted_level = level.sqrt().clamp(0.1, 1.0);
+        let progress = input.beat_progress;
+
+        self.buffer.fade(SPLAT_FADE, 0.0);
+
+        if self.seen_first && progress < self.last_progress {
+            let cx = map_value(self.rng.next_double(), 0.0, 1.0, 0.1, 0.9);
+            let cy = map_value(self.rng.next_double(), 0.0, 1.0, 0.1, 0.9);
+            let radius = adjusted_level * 0.25;
+            let color_index = (self.rng.next().rem_euclid(8)) as usize;
+            for pixel in &mut self.buffer.pixels {
+                let dx = pixel.x - cx;
+                let dy = pixel.y - cy;
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist < radius {
+                    let color = input.palette_entries[color_index].gradient_color(
+                        dist / radius,
+                        0.0,
+                        true,
+                    );
+                    pixel.set_color(color);
+                }
+            }
+        }
+
+        self.last_progress = progress;
+        self.seen_first = true;
+        out.extend(self.buffer.frame_commands());
     }
 }
 
@@ -595,6 +1182,11 @@ impl DotNetRandom {
     fn next_int(&mut self, min_value: i32, max_value: i32) -> i32 {
         let range = i64::from(max_value) - i64::from(min_value);
         (self.next_double() * range as f64) as i32 + min_value
+    }
+
+    /// Mirrors C# `Random.Next()`, returning a value in `[0, i32::MAX)`.
+    fn next(&mut self) -> i32 {
+        self.internal_sample()
     }
 }
 
@@ -2804,7 +3396,7 @@ mod tests {
         render_dome_visualizer, render_stage_visualizer, render_stage_visualizer_with_input,
         stage_frame_hash, BarDiagnosticVisualizer, Classification, DiagnosticInput,
         DomeDiagnosticVisualizer, LiveVisualizer, OrientationOverride, StageVisualizer,
-        StageVisualizerInput, VisualizerInput, INVENTORY,
+        StageVisualizerInput, VisualizerInput, VisualizerRuntime, INVENTORY,
     };
 
     fn frame_colors(commands: &[DomeCommand]) -> &[domers_core::Rgb] {
@@ -3290,6 +3882,104 @@ mod tests {
             connected >= triangles.len() - 1,
             "snake graph should be almost fully connected, got {connected}/{}",
             triangles.len()
+        );
+    }
+
+    fn pixel_commands(commands: &[DomeCommand]) -> Vec<(usize, usize, domers_core::Rgb)> {
+        commands
+            .iter()
+            .filter_map(|command| match command {
+                DomeCommand::Pixel {
+                    strut_index,
+                    led_index,
+                    color,
+                } => Some((*strut_index, *led_index, *color)),
+                DomeCommand::Flush | DomeCommand::Frame(_) => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn race_racers_advance_with_wall_clock_time() {
+        let mut runtime = VisualizerRuntime::default();
+        let base = VisualizerInput {
+            volume: 0.8,
+            beat_progress: 0.25,
+            now_ms: 0,
+            ..VisualizerInput::default()
+        };
+        let first = runtime.render_dome(LiveVisualizer::Race, base);
+        // A second later the volume-driven racers must have rotated.
+        let later = runtime.render_dome(
+            LiveVisualizer::Race,
+            VisualizerInput {
+                now_ms: 1_000,
+                ..base
+            },
+        );
+        assert_ne!(
+            pixel_commands(&first),
+            pixel_commands(&later),
+            "Race racers should rotate as wall-clock time advances"
+        );
+    }
+
+    #[test]
+    fn switch_wipes_previous_visualizer() {
+        let mut runtime = VisualizerRuntime::default();
+        // Snakes emits pixel deltas; the very first activation must not prepend a
+        // clearing frame (nothing is on the dome yet).
+        let first = runtime.render_dome(LiveVisualizer::Snakes, VisualizerInput::default());
+        assert!(
+            !matches!(first.first(), Some(DomeCommand::Frame(_))),
+            "first activation should not emit a clearing frame"
+        );
+        // Switching visualizers clears the dome with a leading all-black frame.
+        let switched = runtime.render_dome(LiveVisualizer::Radial, VisualizerInput::default());
+        match switched.first() {
+            Some(DomeCommand::Frame(colors)) => {
+                assert_eq!(colors.len(), DOME_PIXELS);
+                assert!(colors.iter().all(|color| *color == domers_core::Rgb::BLACK));
+            }
+            _ => panic!("visualizer switch should begin with a black clearing frame"),
+        }
+    }
+
+    #[test]
+    fn splat_spawns_on_beat_wrap() {
+        let mut runtime = VisualizerRuntime::default();
+        let non_black = |commands: &[DomeCommand]| {
+            frame_colors(commands)
+                .iter()
+                .any(|color| *color != domers_core::Rgb::BLACK)
+        };
+        // Rising progress: fade only, no spawn yet.
+        let _ = runtime.render_dome(
+            LiveVisualizer::Splat,
+            VisualizerInput {
+                beat_progress: 0.2,
+                ..VisualizerInput::default()
+            },
+        );
+        let before_wrap = runtime.render_dome(
+            LiveVisualizer::Splat,
+            VisualizerInput {
+                beat_progress: 0.9,
+                ..VisualizerInput::default()
+            },
+        );
+        assert!(!non_black(&before_wrap), "no splat before the beat wraps");
+        // Progress wraps downward (0.9 -> 0.1): a splat spawns.
+        let after_wrap = runtime.render_dome(
+            LiveVisualizer::Splat,
+            VisualizerInput {
+                beat_progress: 0.1,
+                ..VisualizerInput::default()
+            },
+        );
+        assert!(
+            non_black(&after_wrap),
+            "splat should spawn when beat progress wraps"
         );
     }
 
