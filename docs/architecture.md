@@ -8,7 +8,7 @@
 - `domers-engine`: scheduler and frame orchestration.
 - `domers-outputs`: dome/bar/stage commands, topology, simulator sinks, and OPC encoding.
 - `domers-inputs`: audio/MIDI payload parsing, Madmom and DJ Link sidecar parsing, and orientation datagram classification.
-- `domers-visualizers`: visualizer inventory, dome/bar/stage renderers, diagnostics, and frame-hash harnesses.
+- `domers-visualizers`: visualizer inventory, dome/bar/stage renderers, diagnostics, and frame-hash harnesses. Implementation is split under `crates/visualizers/src/` into `inventory`, `input`, `render`, `runtime/` (persistent state machines), `dome/` (per-visualizer frame builders), shared helpers (`geometry`, `math`, `buffer`, `color_util`, `rng`), and `tests/` (golden parity).
 - `domers-server`: runtime state, HTTP/WebSocket API, input tasks, simulator frames, and hardware output.
 - `domers-test-support`: fake clocks and deterministic test utilities.
 
@@ -38,7 +38,7 @@ flowchart LR
   subgraph Frame["Frame pipeline"]
     Snapshot["Frame snapshot<br/>config + drained inputs"]
     Scheduler["Engine scheduler<br/>400 Hz compute cap"]
-    Viz["Visualizers + diagnostics<br/>dome / bar / stage"]
+    Viz["Visualizers + diagnostics<br/>VisualizerRuntime<br/>dome / bar / stage"]
     Commands["Output command frame"]
   end
 
@@ -72,8 +72,10 @@ flowchart LR
 The runtime has one authoritative state owner: `ServerState`. Browser actions and
 input adapters enter through explicit API/task paths, engine frames render from a
 snapshot, and output command frames fan out to OPC clients plus browser simulator
-views. Browser simulator views render intended engine output; they do not read
-back from OPC hardware sockets.
+views. Stateful dome visualizers keep per-mode state in `VisualizerRuntime`
+(Snakes throttling, Race/Volume/Flash motion, buffer-backed Radial/Splat/Paintbrush,
+TV Static RNG, switch-wipe on mode change). Browser simulator views render intended
+engine output; they do not read back from OPC hardware sockets.
 
 ## Runtime Surface
 

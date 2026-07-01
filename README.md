@@ -18,6 +18,7 @@
 - Core input support for MIDI/audio UDP adapters, optional macOS/Linux native capture, orientation datagram ingestion, tap tempo, and Madmom `BEAT:{seconds}` protocol parsing.
 - Managed Madmom sidecar lifecycle using `DBNBeatTracker --host_api --audio_input=<index> online`.
 - DJ Link / Carabiner-compatible sidecar tempo sync and Spectrum ADSR MIDI level drivers.
+- Automated Spectrum visualizer parity: 17/17 first-frame and 11/11 multi-frame C# golden hashes (see [parity closure](docs/parity-closure.md)).
 
 ## Quick Start
 
@@ -123,6 +124,7 @@ Run `make help` for all build, run, test, lint, import, and release targets.
 
 - [Architecture](docs/architecture.md)
 - [Configuration](docs/configuration.md)
+- [Spectrum parity closure](docs/parity-closure.md)
 - [UI expectations](docs/ui-expectations.md)
 - [Testing](docs/testing.md)
 - [Hardware mapping](docs/hardware-mapping.md)

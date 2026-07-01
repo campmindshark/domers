@@ -1,27 +1,37 @@
 # domers-visualizers
 
-Deterministic visualizer and diagnostic renderers.
+Spectrum visualizer ports and golden-test harness.
 
-## Responsibilities
+## Module layout
 
-- Track the used Spectrum visualizer inventory.
-- Render dome live visualizers into simulator/hardware command streams.
-- Render dome, bar, and stage diagnostic patterns.
-- Keep local stable frame hashes and compare against captured Spectrum visualizer goldens.
-- Consume the active full eight-color palette bank.
-
-## Key Files
-
-- `src/lib.rs`: visualizer inventory, input model, dome/bar/stage renderers, diagnostics, and tests.
-- `../../fixtures/spectrum-csharp/visualizer_frame_cases.json`: source-traceable manifest with captured Spectrum frame hashes.
+```
+src/
+  lib.rs           — crate root; public re-exports
+  inventory.rs     — `INVENTORY`, `Classification`
+  input.rs         — `VisualizerInput`, diagnostic/live enums
+  quaternion.rs    — public `Quaternion` type
+  render.rs        — stateless `render_*` entry points
+  runtime/         — persistent `VisualizerRuntime` + per-visualizer state machines
+  dome/            — stateless frame builders (Volume, Flash, Race, …)
+  diagnostics.rs   — dome/bar/stage diagnostic visualizers
+  buffer.rs        — full-dome pixel buffer (Radial, Splat, Paintbrush)
+  geometry.rs      — dome LED point fixtures + distance helpers
+  math.rs          — map/wrap, radial effect, animation progress
+  color_util.rs    — HSV, scale, diagnostic palette helpers
+  rng.rs           — `DotNetRandom` (Spectrum-compatible)
+  hash.rs          — golden-test frame hashing (test-only)
+  tests/           — golden parity + unit tests
+```
 
 ## Tests
 
-Run this crate with:
+Default `cargo test` runs unit tests and the **multi-frame sequence** golden suite.
+
+First-frame goldens are `#[ignore]`; run via `make test-parity`.
 
 ```sh
-cargo test -p domers-visualizers
+make test-parity
+cargo test -p domers-visualizers rust_visualizer_sequences_match_spectrum_csharp_goldens
 ```
 
-Exact Spectrum frame equivalence is gated by the captured Spectrum hashes in the
-visualizer manifest and by the Rust frame-hash tests in this crate.
+See [docs/testing.md](../../docs/testing.md) and [docs/parity-closure.md](../../docs/parity-closure.md).

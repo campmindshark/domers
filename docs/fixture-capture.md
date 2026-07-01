@@ -33,12 +33,18 @@ Capture visualizer frame goldens by running the old Spectrum code headlessly:
 python3 tools/capture_spectrum_visualizer_frames.py
 ```
 
+Capture multi-frame sequence goldens (stateful visualizer motion):
+
+```sh
+DOMERS_VISUALIZER_CASES=fixtures/spectrum-csharp/visualizer_sequence_cases.json python3 tools/capture_spectrum_visualizer_frames.py
+```
+
 The visualizer capture runner references `Spectrum.csproj`, loads Spectrum's
 default XML config with the same serializer family as the WPF app, forces
 simulation-only/no-hardware output, invokes each visualizer directly, and writes
-captured hashes into `visualizer_frame_cases.json`. `check_visualizer_goldens.py`
-fails if any visualizer case has `expected.status != "captured"` or a null
-`expected.value`.
+captured hashes into `visualizer_frame_cases.json` or `visualizer_sequence_cases.json`.
+`check_visualizer_goldens.py` fails if any case has `expected.status != "captured"`,
+a null hash, or pending sequence frames.
 
 Generated fixture groups:
 
@@ -48,6 +54,7 @@ Generated fixture groups:
 - `fixtures/spectrum-csharp/executable_capture.json`
 - `fixtures/spectrum-csharp/opc_packets/`
 - `fixtures/spectrum-csharp/visualizer_frame_cases.json`
+- `fixtures/spectrum-csharp/visualizer_sequence_cases.json`
 - `fixtures/config/spectrum_default_config.xml`
 - `fixtures/orientation/datagram_lengths.json`
 - `fixtures/madmom/valid-and-invalid.txt`

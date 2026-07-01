@@ -22,8 +22,8 @@ make e2e
 - Madmom sidecar launch argument, disabled-lifecycle behavior, managed stdout ingestion path, derived audio input index, and fake-sidecar runtime test.
 - Spectrum-compatible 64-entry palette indexing and gradient blending.
 - Shared-entry palette TOML serialization, parsing, and XML import golden output.
-- Visualizer simulator-frame harness, local frame-hash snapshots for live dome modes, captured headless Spectrum C# first-frame visualizer goldens, and manifest coverage that rejects missing first-frame visualizer hashes.
-- Pending multi-frame Spectrum sequence cases in `fixtures/spectrum-csharp/visualizer_sequence_cases.json`; these are the closure target for stateful visualizer motion.
+- Visualizer simulator-frame harness, local frame-hash snapshots for live dome modes, captured headless Spectrum C# first-frame visualizer goldens (17/17), and multi-frame sequence goldens (11/11) replayed through persistent `VisualizerRuntime`.
+- Manifest coverage that rejects missing or pending visualizer hashes (`check_visualizer_goldens.py`).
 - Server state contract for full config reload/apply, runtime config patching, palette patching, start/stop, metrics, input status, hardware status, and simulator frames.
 - HTTP adapter smoke coverage for the browser shell, simulator page, start/stop, tap tempo, duplicate tap filtering, dome config patching, palette patching, and sandbox simulator frames.
 - UI smoke markers for API/WebSocket wiring, pixel rendering, full palette controls, structured config controls, input status controls, and simulator controls.
@@ -81,11 +81,18 @@ fixture capture. It initializes the Spectrum `Madmom` submodule if needed and
 builds `../spectrum/Spectrum/Spectrum.csproj` directly because the legacy
 solution's `Madmom/Madmom.pyproj` requires Visual Studio Python Tools.
 `capture_spectrum_visualizer_frames.py` executes the old Spectrum visualizers
-headlessly with simulation-only output, and `check_visualizer_goldens.py` ensures
-all first-frame captured hashes are present. The Rust-vs-Spectrum visualizer hash
-test now passes for the captured first-frame manifest. Stateful runtime parity is
-tracked separately by `visualizer_sequence_cases.json` and should be captured with
-`DOMERS_VISUALIZER_CASES=fixtures/spectrum-csharp/visualizer_sequence_cases.json`.
+headlessly with simulation-only output, and `check_visualizer_goldens.py` ensures all first-frame and sequence captured
+hashes are present. Rust-vs-Spectrum visualizer hash tests pass for the full
+captured manifests:
+
+- **First-frame:** `rust_visualizer_hashes_match_spectrum_csharp_goldens` (via `make test-parity`)
+- **Multi-frame:** `rust_visualizer_sequences_match_spectrum_csharp_goldens` (default `cargo test`)
+
+Recapture sequence goldens on Windows/.NET with:
+
+```sh
+DOMERS_VISUALIZER_CASES=fixtures/spectrum-csharp/visualizer_sequence_cases.json python3 tools/capture_spectrum_visualizer_frames.py
+```
 
 Browser screenshots, load tests, and physical hardware sign-off artifacts are release evidence, not prerequisites for the no-hardware test suite.
 

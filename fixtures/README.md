@@ -6,7 +6,8 @@ Expected fixture groups:
 
 - `spectrum-csharp/`: exported C# topology, OPC packet references, and headless executable captures
 - `spectrum-csharp/executable_capture.json`: C#-executed bar/stage simulator command queue semantics
-- `spectrum-csharp/visualizer_frame_cases.json`: source-traceable visualizer parity cases with captured Spectrum C# frame hashes
+- `spectrum-csharp/visualizer_frame_cases.json`: first-frame visualizer parity (17 captured Spectrum C# hashes)
+- `spectrum-csharp/visualizer_sequence_cases.json`: multi-frame stateful visualizer sequences (11 captured)
 - `config/`: default and edge XML configs used only for migration tests
 - `orientation/`: UDP datagram samples
 - `madmom/`: sidecar stdout samples
@@ -21,6 +22,7 @@ Spectrum C# frame hashes.
 python3 tools/extract_spectrum_fixtures.py
 python3 tools/capture_spectrum_executable_fixtures.py
 python3 tools/capture_spectrum_visualizer_frames.py
+DOMERS_VISUALIZER_CASES=fixtures/spectrum-csharp/visualizer_sequence_cases.json python3 tools/capture_spectrum_visualizer_frames.py
 ```
 
 ## Examples

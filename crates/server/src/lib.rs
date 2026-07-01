@@ -43,7 +43,7 @@ use domers_visualizers::{
     render_stage_visualizer_with_input, BarDiagnosticVisualizer, DiagnosticInput,
     DomeDiagnosticVisualizer, LiveVisualizer, OrientationDeviceInput, OrientationOverride,
     Quaternion, StageVisualizer, StageVisualizerInput, VisualizerInput, VisualizerRuntime,
-    MAX_ORIENTATION_DEVICES,
+    MAX_ORIENTATION_DEVICES, VOLUME_GRADIENT_SPEED, VOLUME_ROTATION_SPEED,
 };
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native-capture")]
@@ -421,6 +421,8 @@ impl SimulatorControls {
             animation_frame,
             now_ms,
             measure_length_ms,
+            beat_progress_rotation: None,
+            beat_progress_gradient: None,
             orientation_override: self.orientation_override(),
             flash_active: self.flash_active,
             primary: palette[0],
@@ -888,6 +890,10 @@ impl ServerState {
         let diagnostic_frame_index = self.metrics.frames;
         let now_ms = self.now_ms();
         let measure_length_ms = self.measure_length_ms();
+        let beat_progress_rotation =
+            measure_length_ms.map(|_| self.inputs.beat.progress(now_ms, VOLUME_ROTATION_SPEED));
+        let beat_progress_gradient =
+            measure_length_ms.map(|_| self.inputs.beat.progress(now_ms, VOLUME_GRADIENT_SPEED));
         let orientation_devices = orientation_device_inputs(&self.inputs.orientation.devices());
         render_operator_frame(
             &self.config,
@@ -897,6 +903,8 @@ impl ServerState {
             visualizer_frame_index,
             now_ms,
             measure_length_ms,
+            beat_progress_rotation,
+            beat_progress_gradient,
             &mut self.visualizer_runtime,
         )
     }
@@ -956,10 +964,7 @@ impl ServerState {
         reason = "Measure length derives from a bounded beat interval and stays within u32"
     )]
     fn measure_length_ms(&self) -> Option<u32> {
-        self.inputs
-            .beat
-            .beat_ms()
-            .map(|beat_ms| (beat_ms as f64 / MEASURE_PROGRESS_FACTOR) as u32)
+        self.inputs.beat.beat_ms().map(|beat_ms| beat_ms as u32)
     }
 
     fn visualizer_controls(&self) -> SimulatorControls {
@@ -970,10 +975,8 @@ impl ServerState {
             controls.volume = volume;
         }
         if self.inputs.beat.beat_ms().is_some() {
-            controls.beat_progress = self
-                .inputs
-                .beat
-                .progress(self.now_ms(), MEASURE_PROGRESS_FACTOR);
+            // Spectrum visualizers read `ProgressThroughMeasure` (= factor 1.0).
+            controls.beat_progress = self.inputs.beat.progress(self.now_ms(), 1.0);
         }
         controls
     }
@@ -1485,6 +1488,8 @@ impl AppRuntime {
             diagnostic_frame_index,
             visualizer_frame_index,
             now_ms,
+            None,
+            None,
             None,
             &mut state.sandbox_visualizer_runtime,
         );
@@ -2708,6 +2713,8 @@ fn render_operator_frame(
     visualizer_frame_index: u64,
     now_ms: u64,
     measure_length_ms: Option<u32>,
+    beat_progress_rotation: Option<f64>,
+    beat_progress_gradient: Option<f64>,
     runtime: &mut VisualizerRuntime,
 ) -> OperatorCommandFrame {
     let engine = EngineConfig::from(config);
@@ -2716,6 +2723,8 @@ fn render_operator_frame(
     let schedule = schedule_operator_frame(&inputs, &outputs);
     let mut visualizer_input =
         simulator.visualizer_input(&engine, visualizer_frame_index, now_ms, measure_length_ms);
+    visualizer_input.beat_progress_rotation = beat_progress_rotation;
+    visualizer_input.beat_progress_gradient = beat_progress_gradient;
     visualizer_input.orientation_devices = *orientation_devices;
     visualizer_input.dome_brightness = config.dome.brightness;
     let diagnostic_input = DiagnosticInput {
@@ -3034,8 +3043,6 @@ fn stage_side_lengths(config: &DomersConfig) -> Vec<usize> {
         .collect()
 }
 
-const MEASURE_PROGRESS_FACTOR: f64 = 0.25;
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -3176,7 +3183,7 @@ mod tests {
         state.set_now_ms_for_test(1_000);
         let first = state.visualizer_controls();
 
-        state.set_now_ms_for_test(4_000);
+        state.set_now_ms_for_test(1_250);
         let second = state.visualizer_controls();
 
         assert_eq!(state.snapshot().inputs.beat_ms, Some(500));
@@ -3219,7 +3226,7 @@ mod tests {
         state.set_now_ms_for_test(1_250);
 
         assert!((state.snapshot().inputs.beat_progress - 0.5).abs() < 0.01);
-        assert!((state.visualizer_controls().beat_progress - 0.125).abs() < 0.01);
+        assert!((state.visualizer_controls().beat_progress - 0.5).abs() < 0.01);
     }
 
     #[test]
@@ -3262,11 +3269,11 @@ mod tests {
 
         state.set_now_ms_for_test(4_000);
         assert!((state.snapshot().inputs.beat_progress - 0.5).abs() < 0.01);
-        assert!((state.visualizer_controls().beat_progress - 0.125).abs() < 0.01);
+        assert!((state.visualizer_controls().beat_progress - 0.5).abs() < 0.01);
 
         state.set_now_ms_for_test(13_000);
         assert!((state.snapshot().inputs.beat_progress - 0.0).abs() < 0.01);
-        assert!((state.visualizer_controls().beat_progress - 0.5).abs() < 0.01);
+        assert!((state.visualizer_controls().beat_progress - 0.0).abs() < 0.01);
     }
 
     #[test]
