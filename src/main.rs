@@ -9,7 +9,7 @@ use std::{
     process::Command,
 };
 
-use domers_core::{DomersConfig, TempoSource};
+use domers_core::{import_spectrum_xml, DomersConfig, TempoSource};
 use domers_inputs::MadmomLaunchConfig;
 use domers_outputs::OpcAddress;
 
@@ -26,29 +26,43 @@ async fn main() {
 
 async fn run() -> Result<(), Box<dyn Error>> {
     let options = Options::parse(env::args().skip(1))?;
-    let config = load_config(&options.config_path)?;
-
-    if matches!(options.command, CommandMode::Doctor) {
-        run_doctor(&options, &config)?;
-        return Ok(());
+    match options.command {
+        CommandMode::Run {
+            bind_addr,
+            config_path,
+        } => {
+            let config = load_config(&config_path)?;
+            run_preflight(bind_addr, &config)?;
+            println!("Domers listening on http://{bind_addr}");
+            println!("Loaded config from {}", config_path.display());
+            domers_server::serve(bind_addr, config).await?;
+        }
+        CommandMode::Doctor {
+            bind_addr,
+            config_path,
+        } => {
+            let config = load_config(&config_path)?;
+            run_doctor(bind_addr, &config_path, &config)?;
+        }
+        CommandMode::ImportSpectrumXml { input, output } => {
+            import_spectrum_xml_command(&input, &output)?;
+        }
     }
-
-    run_preflight(&options, &config)?;
-    println!("Domers listening on http://{}", options.bind_addr);
-    println!("Loaded config from {}", options.config_path.display());
-
-    domers_server::serve(options.bind_addr, config).await?;
     Ok(())
 }
 
-fn run_doctor(options: &Options, config: &DomersConfig) -> Result<(), Box<dyn Error>> {
-    run_preflight(options, config)?;
-    println!("doctor ok: {}", options.config_path.display());
+fn run_doctor(
+    bind_addr: SocketAddr,
+    config_path: &Path,
+    config: &DomersConfig,
+) -> Result<(), Box<dyn Error>> {
+    run_preflight(bind_addr, config)?;
+    println!("doctor ok: {}", config_path.display());
     Ok(())
 }
 
-fn run_preflight(options: &Options, config: &DomersConfig) -> Result<(), Box<dyn Error>> {
-    assert_bind_available(options.bind_addr)?;
+fn run_preflight(bind_addr: SocketAddr, config: &DomersConfig) -> Result<(), Box<dyn Error>> {
+    assert_bind_available(bind_addr)?;
     if config.dome.enabled {
         OpcAddress::parse(&config.dome.opc_address)
             .map_err(|error| format!("invalid dome OPC address: {error}"))?;
@@ -60,6 +74,19 @@ fn run_preflight(options: &Options, config: &DomersConfig) -> Result<(), Box<dyn
     if matches!(config.tempo.source, TempoSource::Madmom) {
         validate_madmom_command(config)?;
     }
+    Ok(())
+}
+
+fn import_spectrum_xml_command(input: &Path, output: &Path) -> Result<(), Box<dyn Error>> {
+    let xml = fs::read_to_string(input)?;
+    let imported = import_spectrum_xml(&xml);
+    let toml = imported.config.to_toml_string()?;
+    fs::write(output, toml)?;
+
+    for warning in imported.report.warnings {
+        eprintln!("warning: {:?}: {}", warning.kind, warning.field);
+    }
+
     Ok(())
 }
 
@@ -115,19 +142,27 @@ fn load_config(path: &Path) -> Result<DomersConfig, Box<dyn Error>> {
 #[derive(Debug, Eq, PartialEq)]
 struct Options {
     command: CommandMode,
-    bind_addr: SocketAddr,
-    config_path: PathBuf,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 enum CommandMode {
-    Run,
-    Doctor,
+    Run {
+        bind_addr: SocketAddr,
+        config_path: PathBuf,
+    },
+    Doctor {
+        bind_addr: SocketAddr,
+        config_path: PathBuf,
+    },
+    ImportSpectrumXml {
+        input: PathBuf,
+        output: PathBuf,
+    },
 }
 
 impl Options {
     fn parse(args: impl IntoIterator<Item = String>) -> Result<Self, Box<dyn Error>> {
-        let mut command = CommandMode::Run;
+        let mut mode = "run";
         let mut bind_addr = DEFAULT_BIND_ADDR.parse()?;
         let mut config_path = PathBuf::from(DEFAULT_CONFIG_PATH);
         let mut args: Vec<_> = args.into_iter().collect();
@@ -138,9 +173,10 @@ impl Options {
                     let _ = args.remove(0);
                 }
                 "doctor" | "--check" => {
-                    command = CommandMode::Doctor;
+                    mode = "doctor";
                     let _ = args.remove(0);
                 }
+                "import-spectrum-xml" => return parse_import_spectrum_xml(args),
                 "--bind" | "--config" | "--help" | "-h" => {}
                 _ => {
                     return Err(format!("unknown command or argument: {first}\n{}", usage()).into())
@@ -166,16 +202,42 @@ impl Options {
             }
         }
 
-        Ok(Self {
-            command,
-            bind_addr,
-            config_path,
-        })
+        let command = match mode {
+            "doctor" => CommandMode::Doctor {
+                bind_addr,
+                config_path,
+            },
+            _ => CommandMode::Run {
+                bind_addr,
+                config_path,
+            },
+        };
+
+        Ok(Self { command })
     }
 }
 
+fn parse_import_spectrum_xml(mut args: Vec<String>) -> Result<Options, Box<dyn Error>> {
+    let _ = args.remove(0);
+    let mut args = args.into_iter();
+    let input = args
+        .next()
+        .map(PathBuf::from)
+        .ok_or("missing Spectrum XML input path")?;
+    let output = args
+        .next()
+        .map(PathBuf::from)
+        .ok_or("missing Domers TOML output path")?;
+    if args.next().is_some() {
+        return Err("unexpected extra arguments".into());
+    }
+    Ok(Options {
+        command: CommandMode::ImportSpectrumXml { input, output },
+    })
+}
+
 fn usage() -> &'static str {
-    "usage: domers [run|doctor|--check] [--config domers.toml] [--bind 127.0.0.1:3000]"
+    "usage: domers [run|doctor|--check] [--config domers.toml] [--bind 127.0.0.1:3000]\n       domers import-spectrum-xml <spectrum.xml> <domers.toml>"
 }
 
 #[cfg(test)]
@@ -189,11 +251,12 @@ mod tests {
         let options = Options::parse(Vec::<String>::new()).expect("defaults parse");
 
         assert_eq!(
-            options.bind_addr,
-            "127.0.0.1:3000".parse::<SocketAddr>().expect("addr parses")
+            options.command,
+            CommandMode::Run {
+                bind_addr: "127.0.0.1:3000".parse::<SocketAddr>().expect("addr parses"),
+                config_path: PathBuf::from(DEFAULT_CONFIG_PATH)
+            }
         );
-        assert_eq!(options.command, CommandMode::Run);
-        assert_eq!(options.config_path, PathBuf::from(DEFAULT_CONFIG_PATH));
     }
 
     #[test]
@@ -207,11 +270,12 @@ mod tests {
         .expect("explicit options parse");
 
         assert_eq!(
-            options.bind_addr,
-            "127.0.0.1:4000".parse::<SocketAddr>().expect("addr parses")
+            options.command,
+            CommandMode::Run {
+                bind_addr: "127.0.0.1:4000".parse::<SocketAddr>().expect("addr parses"),
+                config_path: PathBuf::from("examples/domers.toml")
+            }
         );
-        assert_eq!(options.command, CommandMode::Run);
-        assert_eq!(options.config_path, PathBuf::from("examples/domers.toml"));
     }
 
     #[test]
@@ -223,7 +287,30 @@ mod tests {
         ])
         .expect("doctor options parse");
 
-        assert_eq!(options.command, CommandMode::Doctor);
-        assert_eq!(options.config_path, PathBuf::from("domers.toml"));
+        assert_eq!(
+            options.command,
+            CommandMode::Doctor {
+                bind_addr: "127.0.0.1:3000".parse::<SocketAddr>().expect("addr parses"),
+                config_path: PathBuf::from("domers.toml")
+            }
+        );
+    }
+
+    #[test]
+    fn parses_import_spectrum_xml_command() {
+        let options = Options::parse([
+            "import-spectrum-xml".to_string(),
+            "spectrum.xml".to_string(),
+            "domers.toml".to_string(),
+        ])
+        .expect("import options parse");
+
+        assert_eq!(
+            options.command,
+            CommandMode::ImportSpectrumXml {
+                input: PathBuf::from("spectrum.xml"),
+                output: PathBuf::from("domers.toml")
+            }
+        );
     }
 }

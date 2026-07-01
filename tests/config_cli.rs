@@ -5,7 +5,7 @@ use std::{fs, process::Command};
 #[test]
 fn imports_spectrum_xml_to_domers_toml_file() {
     let output = std::env::temp_dir().join(format!(
-        "domers-config-{}-{}.toml",
+        "domers-{}-{}.toml",
         std::process::id(),
         "spectrum-import"
     ));
@@ -14,14 +14,14 @@ fn imports_spectrum_xml_to_domers_toml_file() {
         "/fixtures/config/spectrum_default_config.xml"
     );
 
-    let status = Command::new(env!("CARGO_BIN_EXE_domers-config"))
+    let status = Command::new(env!("CARGO_BIN_EXE_domers"))
         .args([
             "import-spectrum-xml",
             input,
             output.to_str().expect("valid temp path"),
         ])
         .status()
-        .expect("domers-config should run");
+        .expect("domers should run");
 
     assert!(status.success());
 
@@ -36,7 +36,7 @@ fn imports_spectrum_xml_to_domers_toml_file() {
 #[test]
 fn spectrum_xml_import_matches_checked_example_config() {
     let output = std::env::temp_dir().join(format!(
-        "domers-config-{}-{}.toml",
+        "domers-{}-{}.toml",
         std::process::id(),
         "example-golden"
     ));
@@ -46,14 +46,14 @@ fn spectrum_xml_import_matches_checked_example_config() {
     );
     let expected = concat!(env!("CARGO_MANIFEST_DIR"), "/examples/domers.toml");
 
-    let status = Command::new(env!("CARGO_BIN_EXE_domers-config"))
+    let status = Command::new(env!("CARGO_BIN_EXE_domers"))
         .args([
             "import-spectrum-xml",
             input,
             output.to_str().expect("valid temp path"),
         ])
         .status()
-        .expect("domers-config should run");
+        .expect("domers should run");
 
     assert!(status.success());
 

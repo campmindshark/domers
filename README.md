@@ -74,7 +74,7 @@ cp examples/domers.toml domers.toml
 Import an existing Spectrum XML config:
 
 ```sh
-cargo run --bin domers-config -- import-spectrum-xml \
+cargo run --bin domers -- import-spectrum-xml \
   fixtures/config/spectrum_default_config.xml \
   domers.toml
 ```

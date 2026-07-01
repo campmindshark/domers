@@ -213,10 +213,10 @@ provide whole-signal volume input.
 
 ## Import Existing Spectrum XML
 
-Use `domers-config` to convert a Spectrum XML file into a `dome-rs` TOML file:
+Use `domers import-spectrum-xml` to convert a Spectrum XML file into a `dome-rs` TOML file:
 
 ```sh
-cargo run --bin domers-config -- import-spectrum-xml /path/to/spectrum_config.xml domers.toml
+cargo run --bin domers -- import-spectrum-xml /path/to/spectrum_config.xml domers.toml
 ```
 
 The command:

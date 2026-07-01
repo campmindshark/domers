@@ -9,7 +9,7 @@ This document separates deliberate `dome-rs` design choices from the architectur
 **dome-rs:** Runtime configuration is TOML. XML is import-only via:
 
 ```sh
-cargo run --bin domers-config -- import-spectrum-xml <spectrum.xml> <domers.toml>
+cargo run --bin domers -- import-spectrum-xml <spectrum.xml> <domers.toml>
 ```
 
 **Reason:** TOML is idiomatic in Rust, easy to diff, and strict enough for operator-edited config. The importer preserves migration from existing show configs while preventing stale XML fields from becoming runtime state.
