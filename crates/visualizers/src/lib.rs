@@ -807,6 +807,10 @@ fn radial_frame(input: VisualizerInput) -> Vec<Rgb> {
     reason = "Splat preview clamps normalized brightness before RGB scaling"
 )]
 fn splat_frame(input: VisualizerInput) -> Vec<Rgb> {
+    if input.animation_frame == 0 {
+        return vec![Rgb::BLACK; DOME_PIXELS];
+    }
+
     let adjusted_level = f64::from(input.volume.clamp(0.0, 1.0))
         .sqrt()
         .clamp(0.1, 1.0);
@@ -1677,7 +1681,13 @@ mod tests {
 
     #[test]
     fn splat_preview_renders_fading_blobs() {
-        let commands = render_dome_visualizer(LiveVisualizer::Splat, VisualizerInput::default());
+        let commands = render_dome_visualizer(
+            LiveVisualizer::Splat,
+            VisualizerInput {
+                animation_frame: 120,
+                ..VisualizerInput::default()
+            },
+        );
         let frame = commands
             .iter()
             .find_map(|command| match command {
@@ -1788,7 +1798,7 @@ mod tests {
             (LiveVisualizer::Volume, 15_270_928_452_629_649_531),
             (LiveVisualizer::Flash, 14_695_981_039_346_656_037),
             (LiveVisualizer::Radial, 1_809_576_378_694_742_732),
-            (LiveVisualizer::Splat, 16_317_372_045_614_077_291),
+            (LiveVisualizer::Splat, 12_459_070_695_921_506_308),
             (LiveVisualizer::Race, 6_816_113_448_421_016_324),
             (LiveVisualizer::Snakes, 2_228_629_276_110_457_077),
             (LiveVisualizer::QuaternionTest, 1_564_991_241_466_880_178),
